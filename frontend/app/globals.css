@@ -1,0 +1,284 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --ring: oklch(0.439 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.439 0 0);
+}
+
+@theme inline {
+  --font-sans: "Geist", "Geist Fallback";
+  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Admin Theme Palettes */
+[data-admin-theme="steel"] {
+  --admin-primary: #1f4d7a;
+  --admin-primary-light: #2e5fa8;
+  --admin-primary-dark: #153560;
+  --admin-accent: #f5c518;
+  --admin-accent-light: #ffd650;
+  --admin-accent-dark: #d4a200;
+  --admin-surface-light: #f5f7fa;
+  --admin-surface-medium: #eef2f6;
+  --admin-surface-dark: #e5e7eb;
+  --admin-text-primary: #0f172a;
+  --admin-text-secondary: #475569;
+  --admin-text-tertiary: #94a3b8;
+  --admin-border: #e5e7eb;
+  --admin-success: #10b981;
+  --admin-warning: #f59e0b;
+  --admin-error: #ef4444;
+  --admin-bg: #ffffff;
+}
+
+[data-admin-theme="graphite"] {
+  --admin-primary: #f97316;
+  --admin-primary-light: #fb923c;
+  --admin-primary-dark: #ea580c;
+  --admin-accent: #f59e0b;
+  --admin-accent-light: #fbbf24;
+  --admin-accent-dark: #d97706;
+  --admin-surface-light: #1f2937;
+  --admin-surface-medium: #111827;
+  --admin-surface-dark: #0f172a;
+  --admin-text-primary: #f3f4f6;
+  --admin-text-secondary: #d1d5db;
+  --admin-text-tertiary: #9ca3af;
+  --admin-border: #374151;
+  --admin-success: #22c55e;
+  --admin-warning: #f59e0b;
+  --admin-error: #f43f5e;
+  --admin-bg: #111827;
+}
+
+[data-admin-theme="evergreen"] {
+  --admin-primary: #14532d;
+  --admin-primary-light: #166e3c;
+  --admin-primary-dark: #0d341e;
+  --admin-accent: #10b981;
+  --admin-accent-light: #6ee7b7;
+  --admin-accent-dark: #059669;
+  --admin-surface-light: #fafafa;
+  --admin-surface-medium: #f3f4f6;
+  --admin-surface-dark: #e5e7eb;
+  --admin-text-primary: #111827;
+  --admin-text-secondary: #4b5563;
+  --admin-text-tertiary: #9ca3af;
+  --admin-border: #e5e7eb;
+  --admin-success: #10b981;
+  --admin-warning: #f59e0b;
+  --admin-error: #ef4444;
+  --admin-bg: #ffffff;
+}
+
+html {
+  --admin-primary: #1f4d7a;
+  --admin-primary-light: #2e5fa8;
+  --admin-primary-dark: #153560;
+  --admin-accent: #f5c518;
+  --admin-accent-light: #ffd650;
+  --admin-accent-dark: #d4a200;
+  --admin-surface-light: #f5f7fa;
+  --admin-surface-medium: #eef2f6;
+  --admin-surface-dark: #e5e7eb;
+  --admin-text-primary: #0f172a;
+  --admin-text-secondary: #475569;
+  --admin-text-tertiary: #94a3b8;
+  --admin-border: #e5e7eb;
+  --admin-success: #10b981;
+  --admin-warning: #f59e0b;
+  --admin-error: #ef4444;
+  --admin-bg: #ffffff;
+
+  /* Storefront Theme Palettes - Steel & Safety Yellow (DEFAULT) */
+  --storefront-brand: #1f4d7a;
+  --storefront-brand-light: #2e5fa8;
+  --storefront-brand-dark: #153560;
+  --storefront-cta: #f5c518;
+  --storefront-cta-light: #ffd650;
+  --storefront-cta-dark: #d4a200;
+  --storefront-surface-light: #f8fafc;
+  --storefront-surface-medium: #eef2f6;
+  --storefront-surface-dark: #e5e7eb;
+  --storefront-text-primary: #0f172a;
+  --storefront-text-secondary: #475569;
+  --storefront-text-tertiary: #94a3b8;
+  --storefront-border: #e5e7eb;
+  --storefront-success: #10b981;
+  --storefront-warning: #f59e0b;
+  --storefront-error: #ef4444;
+}
+
+/* Storefront Graphite & Construction Orange */
+[data-storefront-theme="graphite"] {
+  --storefront-brand: #334155;
+  --storefront-brand-light: #475569;
+  --storefront-brand-dark: #1e293b;
+  --storefront-cta: #f97316;
+  --storefront-cta-light: #fb923c;
+  --storefront-cta-dark: #ea580c;
+  --storefront-surface-light: #f7fafc;
+  --storefront-surface-medium: #edf2f7;
+  --storefront-surface-dark: #e2e8f0;
+  --storefront-text-primary: #0f172a;
+  --storefront-text-secondary: #334155;
+  --storefront-text-tertiary: #94a3b8;
+  --storefront-border: #cbd5e1;
+  --storefront-success: #10b981;
+  --storefront-warning: #f59e0b;
+  --storefront-error: #ef4444;
+}
+
+/* Storefront Evergreen & Tool Blue */
+[data-storefront-theme="evergreen"] {
+  --storefront-brand: #14532d;
+  --storefront-brand-light: #166e3c;
+  --storefront-brand-dark: #0d341e;
+  --storefront-cta: #2563eb;
+  --storefront-cta-light: #3b82f6;
+  --storefront-cta-dark: #1e40af;
+  --storefront-surface-light: #fafafa;
+  --storefront-surface-medium: #f3f4f6;
+  --storefront-surface-dark: #e5e7eb;
+  --storefront-text-primary: #111827;
+  --storefront-text-secondary: #4b5563;
+  --storefront-text-tertiary: #9ca3af;
+  --storefront-border: #e5e7eb;
+  --storefront-success: #10b981;
+  --storefront-warning: #f59e0b;
+  --storefront-error: #ef4444;
+}
+
+/* Storefront Carbon & Lime Signal (Dark) */
+[data-storefront-theme="carbon"] {
+  --storefront-brand: #60a5fa;
+  --storefront-brand-light: #93c5fd;
+  --storefront-brand-dark: #1e3a8a;
+  --storefront-cta: #84cc16;
+  --storefront-cta-light: #a3e635;
+  --storefront-cta-dark: #65a30d;
+  --storefront-surface-light: #1f2937;
+  --storefront-surface-medium: #111827;
+  --storefront-surface-dark: #0b1220;
+  --storefront-text-primary: #f3f4f6;
+  --storefront-text-secondary: #d1d5db;
+  --storefront-text-tertiary: #9ca3af;
+  --storefront-border: #374151;
+  --storefront-success: #4ade80;
+  --storefront-warning: #facc15;
+  --storefront-error: #f87171;
+}

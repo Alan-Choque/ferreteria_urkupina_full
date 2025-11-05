@@ -1,0 +1,31 @@
+services:
+  # mssql service commented out - using Windows host SQL Server instead
+  # mssql:
+  #   image: mcr.microsoft.com/mssql/server:2022-latest
+  #   environment:
+  #     ACCEPT_EULA: "Y"
+  #     MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+  #     MSSQL_PID: "Express"
+  #   ports:
+  #     - "1433:1433"
+  #   volumes:
+  #     - mssql_data:/var/opt/mssql
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: "mssql+pyodbc://ferre_app:F3rre!2025@host.docker.internal:1433/ferreteria_urkupina?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes"
+      JWT_SECRET: "${JWT_SECRET:-change-me}"
+      PYTHONPATH: "/app"
+    ports:
+      - "8000:8000"
+    # Puedes mantener .env para otras variables, pero OJO:
+    # 'environment:' TIENE prioridad sobre 'env_file:'.
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+      - ./scripts:/app/scripts
+    # ¡NO montes .env dentro del contenedor! Evita: - ./.env:/app/.env
+    # Para evitar conflictos con pydantic-settings leyendo /app/.env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
