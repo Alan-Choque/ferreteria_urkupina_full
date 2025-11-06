@@ -14,13 +14,15 @@ services:
   api:
     build: .
     environment:
-      DATABASE_URL: "mssql+pyodbc://ferre_app:F3rre!2025@host.docker.internal:1433/ferreteria_urkupina?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes"
-      JWT_SECRET: "${JWT_SECRET:-change-me}"
+      # Variables de entorno (DATABASE_URL debe estar en .env, no aquí)
       PYTHONPATH: "/app"
+      # JWT_SECRET puede venir de .env o usar default
+      JWT_SECRET: "${JWT_SECRET:-change-me}"
     ports:
+      # Puerto mapeado: host:contenedor
       - "8000:8000"
-    # Puedes mantener .env para otras variables, pero OJO:
-    # 'environment:' TIENE prioridad sobre 'env_file:'.
+      # Opcional: segunda variante en puerto 8080 (comentada)
+      # - "8080:8000"
     env_file:
       - .env
     volumes:
@@ -29,3 +31,10 @@ services:
     # ¡NO montes .env dentro del contenedor! Evita: - ./.env:/app/.env
     # Para evitar conflictos con pydantic-settings leyendo /app/.env
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s

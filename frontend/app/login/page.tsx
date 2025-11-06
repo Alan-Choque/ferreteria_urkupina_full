@@ -3,15 +3,19 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Eye, EyeOff } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Eye, EyeOff, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { authService } from "@/lib/services/auth-service"
+import { useFormSubmit } from "@/hooks/use-form-submit"
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
+  const [errors, setErrors] = useState<{ email?: string; password?: string; submit?: string }>({})
   const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({})
 
   const validateEmail = (value: string) => {
@@ -54,8 +58,26 @@ export default function LoginPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const { submit, isSubmitting } = useFormSubmit(
+    async (data: { email: string; password: string }) => {
+      const user = await authService.login(data.email, data.password)
+      return user
+    },
+    {
+      debounceMs: 300,
+      onSuccess: (user) => {
+        router.push("/admin")
+      },
+      onError: (error) => {
+        setErrors({ submit: error.message })
+      },
+    }
+  )
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setErrors({}) // Clear previous errors
+
     const emailError = validateEmail(email)
     const passwordError = validatePassword(password)
 
@@ -65,10 +87,10 @@ export default function LoginPage() {
       return
     }
 
-    console.log("Login attempt:", { email, password, rememberMe })
+    await submit({ email, password })
   }
 
-  const isFormValid = !errors.email && !errors.password && email && password
+  const isFormValid = !errors.email && !errors.password && email && password && !isSubmitting
 
   return (
     <main className="min-h-screen bg-neutral-50 pt-8 pb-16">
@@ -161,17 +183,31 @@ export default function LoginPage() {
                 </Link>
               </div>
 
+              {/* Error Message */}
+              {errors.submit && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-600 text-sm font-medium">{errors.submit}</p>
+                </div>
+              )}
+
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={!isFormValid}
-                className={`w-full py-2.5 font-semibold rounded transition-colors ${
-                  isFormValid
-                    ? "bg-neutral-700 text-white hover:bg-neutral-800"
+                disabled={!isFormValid || isSubmitting}
+                className={`w-full py-2.5 font-semibold rounded transition-colors flex items-center justify-center gap-2 ${
+                  isFormValid && !isSubmitting
+                    ? "bg-red-600 text-white hover:bg-red-700"
                     : "bg-neutral-300 text-neutral-500 cursor-not-allowed"
                 }`}
               >
-                Iniciar sesión
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Iniciando sesión...
+                  </>
+                ) : (
+                  "Iniciar sesión"
+                )}
               </button>
 
               <p className="text-center text-xs text-neutral-600">* Campos obligatorios</p>

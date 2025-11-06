@@ -35,19 +35,15 @@ export function useFormSubmit<T = any>(
         clearTimeout(debounceTimerRef.current)
       }
 
-      // Si ya está submitting, ignorar
-      if (isSubmitting) {
-        return
-      }
-
       // Verificar si es el mismo submit que el anterior (debounce)
       const currentHash = JSON.stringify(data)
+      const now = Date.now()
       if (
         lastSubmitRef.current &&
         JSON.stringify(lastSubmitRef.current.data) === currentHash &&
-        Date.now() - (lastSubmitRef.current as any).timestamp < debounceMs
+        now - (lastSubmitRef.current as any).timestamp < debounceMs
       ) {
-        return
+        return Promise.resolve((lastSubmitRef.current as any).result)
       }
 
       // Generar idempotency key si no existe
@@ -64,8 +60,9 @@ export function useFormSubmit<T = any>(
             lastSubmitRef.current = {
               data,
               key: idempotencyKey || "",
+              result,
+              timestamp: Date.now(),
             } as any
-            ;(lastSubmitRef.current as any).timestamp = Date.now()
 
             if (onSuccess) {
               onSuccess(result)
@@ -84,7 +81,7 @@ export function useFormSubmit<T = any>(
         }, debounceMs)
       })
     },
-    [submitFn, debounceMs, isSubmitting, generateIdempotencyKey, onSuccess, onError]
+    [submitFn, debounceMs, generateIdempotencyKey, onSuccess, onError]
   )
 
   return {

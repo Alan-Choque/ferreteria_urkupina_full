@@ -3,23 +3,17 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Eye, EyeOff } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Eye, EyeOff, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { authService } from "@/lib/services/auth-service"
+import { useFormSubmit } from "@/hooks/use-form-submit"
 
 type FormData = {
+  username: string
   email: string
   password: string
   confirmPassword: string
-  firstName: string
-  lastName: string
-  phone: string
-  documentType: "CI" | "NIT" | "PASSPORT"
-  documentNumber: string
-  addressLine1: string
-  addressLine2: string
-  city: string
-  department: string
-  postalCode: string
   acceptTerms: boolean
 }
 
@@ -27,24 +21,16 @@ type Errors = Partial<Record<keyof FormData, string>>
 type Touched = Partial<Record<keyof FormData, boolean>>
 
 export default function RegisterPage() {
+  const router = useRouter()
   const [formData, setFormData] = useState<FormData>({
+    username: "",
     email: "",
     password: "",
     confirmPassword: "",
-    firstName: "",
-    lastName: "",
-    phone: "",
-    documentType: "CI",
-    documentNumber: "",
-    addressLine1: "",
-    addressLine2: "",
-    city: "",
-    department: "",
-    postalCode: "",
     acceptTerms: false,
   })
 
-  const [errors, setErrors] = useState<Errors>({})
+  const [errors, setErrors] = useState<Errors & { submit?: string }>({})
   const [touched, setTouched] = useState<Touched>({})
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -73,9 +59,14 @@ export default function RegisterPage() {
   const validatePassword = (value: string) => {
     if (!value) return "La contraseña es obligatoria"
     if (value.length < 8) return "La contraseña debe tener al menos 8 caracteres"
-    if (!/[a-z]/.test(value)) return "Debe contener al menos una letra minúscula"
-    if (!/[A-Z]/.test(value)) return "Debe contener al menos una letra mayúscula"
-    if (!/\d/.test(value)) return "Debe contener al menos un número"
+    return ""
+  }
+
+  const validateUsername = (value: string) => {
+    if (!value) return "El nombre de usuario es obligatorio"
+    if (value.length < 3) return "El nombre de usuario debe tener al menos 3 caracteres"
+    if (value.length > 50) return "El nombre de usuario debe tener máximo 50 caracteres"
+    if (/\s/.test(value)) return "El nombre de usuario no puede contener espacios"
     return ""
   }
 
@@ -115,6 +106,9 @@ export default function RegisterPage() {
   const validateField = (field: keyof FormData, value: string | boolean) => {
     let error = ""
     switch (field) {
+      case "username":
+        error = validateUsername(value as string)
+        break
       case "email":
         error = validateEmail(value as string)
         break
@@ -123,24 +117,6 @@ export default function RegisterPage() {
         break
       case "confirmPassword":
         error = validateConfirmPassword(value as string)
-        break
-      case "phone":
-        error = validatePhone(value as string)
-        break
-      case "documentNumber":
-        error = validateDocumentNumber(value as string)
-        break
-      case "firstName":
-        error = validateName(value as string, "Nombre")
-        break
-      case "lastName":
-        error = validateName(value as string, "Apellidos")
-        break
-      case "city":
-        error = validateName(value as string, "Ciudad")
-        break
-      case "department":
-        error = validateName(value as string, "Departamento")
         break
     }
     setErrors({ ...errors, [field]: error })
@@ -151,20 +127,35 @@ export default function RegisterPage() {
     validateField(field, formData[field])
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const { submit, isSubmitting } = useFormSubmit(
+    async (data: { username: string; email: string; password: string }) => {
+      const response = await authService.register({
+        username: data.username,
+        email: data.email,
+        password: data.password,
+      })
+      return response
+    },
+    {
+      debounceMs: 300,
+      onSuccess: (response) => {
+        router.push("/admin")
+      },
+      onError: (error) => {
+        setErrors({ submit: error.message })
+      },
+    }
+  )
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setErrors({}) // Clear previous errors
 
     const requiredFields: (keyof FormData)[] = [
+      "username",
       "email",
       "password",
       "confirmPassword",
-      "firstName",
-      "lastName",
-      "phone",
-      "documentNumber",
-      "addressLine1",
-      "city",
-      "department",
       "acceptTerms",
     ]
 
@@ -187,9 +178,22 @@ export default function RegisterPage() {
 
     setTouched(allTouched)
 
-    if (Object.keys(newErrors).length === 0 && Object.values(errors).every((e) => !e)) {
-      console.log("Register submit:", formData)
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
     }
+
+    // Check password match
+    if (formData.password !== formData.confirmPassword) {
+      setErrors({ confirmPassword: "Las contraseñas no coinciden" })
+      return
+    }
+
+    await submit({
+      username: formData.username,
+      email: formData.email,
+      password: formData.password,
+    })
   }
 
   const passwordStrength = getPasswordStrength(formData.password)
@@ -205,10 +209,31 @@ export default function RegisterPage() {
         <h1 className="text-4xl font-bold text-neutral-900 mb-12 text-center">Crear nueva cuenta de cliente</h1>
 
         <div className="bg-white border border-neutral-200 rounded-lg p-8">
-          <form onSubmit={handleSubmit} className="space-y-10">
-            {/* Account Section */}
-            <fieldset className="space-y-5">
-              <legend className="text-xl font-bold text-neutral-900">Información de Cuenta</legend>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Username */}
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-neutral-900 mb-2">
+                Nombre de usuario <span className="text-red-600">*</span>
+              </label>
+              <input
+                id="username"
+                type="text"
+                value={formData.username}
+                onChange={(e) => handleChange("username", e.target.value)}
+                onBlur={() => handleBlur("username")}
+                aria-invalid={touched.username && !!errors.username}
+                aria-describedby={errors.username ? "username-error" : undefined}
+                className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors ${
+                  touched.username && errors.username ? "border-red-600 bg-red-50" : "border-neutral-300"
+                }`}
+                placeholder="usuario123"
+              />
+              {touched.username && errors.username && (
+                <p id="username-error" className="text-red-600 text-sm mt-1.5 font-medium">
+                  {errors.username}
+                </p>
+              )}
+            </div>
 
               {/* Email */}
               <div>
@@ -325,257 +350,9 @@ export default function RegisterPage() {
                   </p>
                 )}
               </div>
-            </fieldset>
 
-            {/* Personal Details Section */}
-            <fieldset className="space-y-5 pt-5 border-t border-neutral-200">
-              <legend className="text-xl font-bold text-neutral-900">Información Personal</legend>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* First Name */}
-                <div>
-                  <label htmlFor="firstName" className="block text-sm font-medium text-neutral-900 mb-2">
-                    Nombre <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    id="firstName"
-                    type="text"
-                    value={formData.firstName}
-                    onChange={(e) => handleChange("firstName", e.target.value)}
-                    onBlur={() => handleBlur("firstName")}
-                    aria-invalid={touched.firstName && !!errors.firstName}
-                    aria-describedby={errors.firstName ? "firstName-error" : undefined}
-                    className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors ${
-                      touched.firstName && errors.firstName ? "border-red-600 bg-red-50" : "border-neutral-300"
-                    }`}
-                    placeholder="Tu nombre"
-                  />
-                  {touched.firstName && errors.firstName && (
-                    <p id="firstName-error" className="text-red-600 text-sm mt-1.5 font-medium">
-                      {errors.firstName}
-                    </p>
-                  )}
-                </div>
-
-                {/* Last Name */}
-                <div>
-                  <label htmlFor="lastName" className="block text-sm font-medium text-neutral-900 mb-2">
-                    Apellidos <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    id="lastName"
-                    type="text"
-                    value={formData.lastName}
-                    onChange={(e) => handleChange("lastName", e.target.value)}
-                    onBlur={() => handleBlur("lastName")}
-                    aria-invalid={touched.lastName && !!errors.lastName}
-                    aria-describedby={errors.lastName ? "lastName-error" : undefined}
-                    className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors ${
-                      touched.lastName && errors.lastName ? "border-red-600 bg-red-50" : "border-neutral-300"
-                    }`}
-                    placeholder="Tus apellidos"
-                  />
-                  {touched.lastName && errors.lastName && (
-                    <p id="lastName-error" className="text-red-600 text-sm mt-1.5 font-medium">
-                      {errors.lastName}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Phone */}
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-neutral-900 mb-2">
-                  Teléfono <span className="text-red-600">*</span>
-                </label>
-                <input
-                  id="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => handleChange("phone", e.target.value)}
-                  onBlur={() => handleBlur("phone")}
-                  aria-invalid={touched.phone && !!errors.phone}
-                  aria-describedby={errors.phone ? "phone-error" : undefined}
-                  className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors ${
-                    touched.phone && errors.phone ? "border-red-600 bg-red-50" : "border-neutral-300"
-                  }`}
-                  placeholder="+56 9 1234 5678"
-                />
-                {touched.phone && errors.phone && (
-                  <p id="phone-error" className="text-red-600 text-sm mt-1.5 font-medium">
-                    {errors.phone}
-                  </p>
-                )}
-              </div>
-            </fieldset>
-
-            {/* Identification Section */}
-            <fieldset className="space-y-5 pt-5 border-t border-neutral-200">
-              <legend className="text-xl font-bold text-neutral-900">Identificación</legend>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Document Type */}
-                <div>
-                  <label htmlFor="documentType" className="block text-sm font-medium text-neutral-900 mb-2">
-                    Tipo de documento <span className="text-red-600">*</span>
-                  </label>
-                  <select
-                    id="documentType"
-                    value={formData.documentType}
-                    onChange={(e) => handleChange("documentType", e.target.value)}
-                    onBlur={() => handleBlur("documentType")}
-                    className="w-full px-4 py-2.5 border border-neutral-300 rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors"
-                  >
-                    <option value="CI">Cédula de Identidad (CI)</option>
-                    <option value="NIT">NIT</option>
-                    <option value="PASSPORT">Pasaporte</option>
-                  </select>
-                </div>
-
-                {/* Document Number */}
-                <div>
-                  <label htmlFor="documentNumber" className="block text-sm font-medium text-neutral-900 mb-2">
-                    Número de documento <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    id="documentNumber"
-                    type="text"
-                    value={formData.documentNumber}
-                    onChange={(e) => handleChange("documentNumber", e.target.value)}
-                    onBlur={() => handleBlur("documentNumber")}
-                    aria-invalid={touched.documentNumber && !!errors.documentNumber}
-                    aria-describedby={errors.documentNumber ? "documentNumber-error" : undefined}
-                    className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors ${
-                      touched.documentNumber && errors.documentNumber
-                        ? "border-red-600 bg-red-50"
-                        : "border-neutral-300"
-                    }`}
-                    placeholder="Ingresa tu número de documento"
-                  />
-                  {touched.documentNumber && errors.documentNumber && (
-                    <p id="documentNumber-error" className="text-red-600 text-sm mt-1.5 font-medium">
-                      {errors.documentNumber}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </fieldset>
-
-            {/* Address Section */}
-            <fieldset className="space-y-5 pt-5 border-t border-neutral-200">
-              <legend className="text-xl font-bold text-neutral-900">Dirección</legend>
-
-              {/* Address Line 1 */}
-              <div>
-                <label htmlFor="addressLine1" className="block text-sm font-medium text-neutral-900 mb-2">
-                  Dirección <span className="text-red-600">*</span>
-                </label>
-                <input
-                  id="addressLine1"
-                  type="text"
-                  value={formData.addressLine1}
-                  onChange={(e) => handleChange("addressLine1", e.target.value)}
-                  onBlur={() => handleBlur("addressLine1")}
-                  aria-invalid={touched.addressLine1 && !!errors.addressLine1}
-                  aria-describedby={errors.addressLine1 ? "addressLine1-error" : undefined}
-                  className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors ${
-                    touched.addressLine1 && errors.addressLine1 ? "border-red-600 bg-red-50" : "border-neutral-300"
-                  }`}
-                  placeholder="Calle, número y edificio"
-                />
-                {touched.addressLine1 && errors.addressLine1 && (
-                  <p id="addressLine1-error" className="text-red-600 text-sm mt-1.5 font-medium">
-                    {errors.addressLine1}
-                  </p>
-                )}
-              </div>
-
-              {/* Address Line 2 */}
-              <div>
-                <label htmlFor="addressLine2" className="block text-sm font-medium text-neutral-900 mb-2">
-                  Información adicional
-                </label>
-                <input
-                  id="addressLine2"
-                  type="text"
-                  value={formData.addressLine2}
-                  onChange={(e) => handleChange("addressLine2", e.target.value)}
-                  className="w-full px-4 py-2.5 border border-neutral-300 rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors"
-                  placeholder="Apartamento, suite, etc. (opcional)"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* City */}
-                <div>
-                  <label htmlFor="city" className="block text-sm font-medium text-neutral-900 mb-2">
-                    Ciudad <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    id="city"
-                    type="text"
-                    value={formData.city}
-                    onChange={(e) => handleChange("city", e.target.value)}
-                    onBlur={() => handleBlur("city")}
-                    aria-invalid={touched.city && !!errors.city}
-                    aria-describedby={errors.city ? "city-error" : undefined}
-                    className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors ${
-                      touched.city && errors.city ? "border-red-600 bg-red-50" : "border-neutral-300"
-                    }`}
-                    placeholder="Tu ciudad"
-                  />
-                  {touched.city && errors.city && (
-                    <p id="city-error" className="text-red-600 text-sm mt-1.5 font-medium">
-                      {errors.city}
-                    </p>
-                  )}
-                </div>
-
-                {/* Department */}
-                <div>
-                  <label htmlFor="department" className="block text-sm font-medium text-neutral-900 mb-2">
-                    Departamento <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    id="department"
-                    type="text"
-                    value={formData.department}
-                    onChange={(e) => handleChange("department", e.target.value)}
-                    onBlur={() => handleBlur("department")}
-                    aria-invalid={touched.department && !!errors.department}
-                    aria-describedby={errors.department ? "department-error" : undefined}
-                    className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors ${
-                      touched.department && errors.department ? "border-red-600 bg-red-50" : "border-neutral-300"
-                    }`}
-                    placeholder="Tu departamento"
-                  />
-                  {touched.department && errors.department && (
-                    <p id="department-error" className="text-red-600 text-sm mt-1.5 font-medium">
-                      {errors.department}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Postal Code */}
-              <div>
-                <label htmlFor="postalCode" className="block text-sm font-medium text-neutral-900 mb-2">
-                  Código postal
-                </label>
-                <input
-                  id="postalCode"
-                  type="text"
-                  value={formData.postalCode}
-                  onChange={(e) => handleChange("postalCode", e.target.value)}
-                  className="w-full px-4 py-2.5 border border-neutral-300 rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors"
-                  placeholder="Código postal (opcional)"
-                />
-              </div>
-            </fieldset>
-
-            {/* Terms & Newsletter */}
-            <fieldset className="space-y-4 pt-5 border-t border-neutral-200">
-              <legend className="sr-only">Términos y condiciones</legend>
+            {/* Terms */}
+            <div className="space-y-4 pt-5 border-t border-neutral-200">
 
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
@@ -605,19 +382,34 @@ export default function RegisterPage() {
                 </p>
               )}
 
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" defaultChecked className="w-4 h-4 accent-red-600 cursor-pointer" />
-                <span className="text-sm text-neutral-700">Suscribirme al boletín de Ferretería Urkupina</span>
-              </label>
-            </fieldset>
+            </div>
+
+            {/* Error Message */}
+            {errors.submit && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-600 text-sm font-medium">{errors.submit}</p>
+              </div>
+            )}
 
             {/* Submit Button */}
             <div className="pt-5 border-t border-neutral-200 space-y-4">
               <button
                 type="submit"
-                className="w-full py-2.5 bg-neutral-700 text-white font-semibold rounded hover:bg-neutral-800 transition-colors"
+                disabled={isSubmitting}
+                className={`w-full py-2.5 font-semibold rounded transition-colors flex items-center justify-center gap-2 ${
+                  isSubmitting
+                    ? "bg-neutral-300 text-neutral-500 cursor-not-allowed"
+                    : "bg-red-600 text-white hover:bg-red-700"
+                }`}
               >
-                Crear cuenta
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Creando cuenta...
+                  </>
+                ) : (
+                  "Crear cuenta"
+                )}
               </button>
 
               <p className="text-center text-xs text-neutral-600">* Campos obligatorios</p>

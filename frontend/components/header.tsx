@@ -5,6 +5,7 @@ import { useState } from "react"
 import MegaMenuAnimated from "./mega-menu-animated"
 import { MiniCartButton } from "./cart/mini-cart-button"
 import { ThemeSwitcher } from "./theme-switcher"
+import { ApiHealthBadge } from "./api-health-badge"
 
 export default function Header() {
   const [cartCount] = useState(0)
@@ -15,7 +16,10 @@ export default function Header() {
       <div className="bg-gradient-to-r from-red-600 to-red-500 text-white py-2">
         <div className="max-w-7xl mx-auto px-4 text-center flex items-center justify-between">
           <p className="text-sm font-medium">Compra Ahora y Retira en nuestras Tiendas</p>
-          <ThemeSwitcher />
+          <div className="flex items-center gap-4">
+            <ApiHealthBadge />
+            <ThemeSwitcher />
+          </div>
         </div>
       </div>
 

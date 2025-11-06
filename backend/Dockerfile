@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
 # ── Paquetes base + ODBC ──────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates gnupg apt-transport-https \
+    curl wget ca-certificates gnupg apt-transport-https \
     unixodbc unixodbc-dev \
  && rm -rf /var/lib/apt/lists/*
 

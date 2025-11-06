@@ -10,7 +10,9 @@ try:
         result.fetchone()
     print("DB OK")
 except Exception as e:
-    print(f"DB ERROR: {e}")
+    print(f"DB ERROR: {repr(e)}")
+    print(f"Error type: {type(e).__name__}")
+    print(f"Error message: {str(e)}")
     exit(1)
 
 
