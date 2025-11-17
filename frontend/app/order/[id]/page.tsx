@@ -1,13 +1,17 @@
 "use client"
 
+import { use } from "react"
 import Link from "next/link"
+import { Facebook, Instagram, Twitter, Youtube, MapPin, Phone, Mail } from "lucide-react"
+import jsPDF from "jspdf"
 import Header from "@/components/header"
 import MegaMenu from "@/components/mega-menu"
 
-export default function OrderDetailPage({ params }: { params: { id: string } }) {
+export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   // Mock order data
   const order = {
-    id: params.id,
+    id: id,
     date: "2024-11-15",
     status: "shipped" as const,
     customer: "Juan Pérez",
@@ -22,6 +26,139 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     discount: 43300,
     shipping: 50,
     total: 389750,
+  }
+
+  const downloadPDF = () => {
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const margin = 20
+    let yPos = margin
+
+    // Encabezado
+    doc.setFontSize(20)
+    doc.setFont("helvetica", "bold")
+    doc.text("FERRETERÍA URKUPINA", pageWidth / 2, yPos, { align: "center" })
+    yPos += 10
+
+    doc.setFontSize(12)
+    doc.setFont("helvetica", "normal")
+    doc.text("Av. San Joaquín esquina Calle \"A\"", pageWidth / 2, yPos, { align: "center" })
+    yPos += 5
+    doc.text("Lado del Colegio Miguel Antelo, Guayaramerin, Bolivia", pageWidth / 2, yPos, { align: "center" })
+    yPos += 5
+    doc.text("Tel: +591 68464378 | Email: info@urkupina.com", pageWidth / 2, yPos, { align: "center" })
+    yPos += 15
+
+    // Línea separadora
+    doc.setLineWidth(0.5)
+    doc.line(margin, yPos, pageWidth - margin, yPos)
+    yPos += 10
+
+    // Título del recibo
+    doc.setFontSize(16)
+    doc.setFont("helvetica", "bold")
+    doc.text("RECIBO DE PEDIDO", pageWidth / 2, yPos, { align: "center" })
+    yPos += 10
+
+    // Información del pedido
+    doc.setFontSize(10)
+    doc.setFont("helvetica", "normal")
+    doc.text(`Número de Pedido: ${order.id}`, margin, yPos)
+    yPos += 6
+    doc.text(`Fecha: ${new Date(order.date).toLocaleDateString("es-BO", { 
+      year: "numeric", 
+      month: "long", 
+      day: "numeric" 
+    })}`, margin, yPos)
+    yPos += 6
+    doc.text(`Estado: ${order.status === "shipped" ? "Enviado" : order.status}`, margin, yPos)
+    yPos += 10
+
+    // Información del cliente
+    doc.setFontSize(12)
+    doc.setFont("helvetica", "bold")
+    doc.text("INFORMACIÓN DEL CLIENTE", margin, yPos)
+    yPos += 7
+
+    doc.setFontSize(10)
+    doc.setFont("helvetica", "normal")
+    doc.text(`Nombre: ${order.customer}`, margin, yPos)
+    yPos += 6
+    doc.text(`Email: ${order.email}`, margin, yPos)
+    yPos += 6
+    doc.text(`Teléfono: ${order.phone}`, margin, yPos)
+    yPos += 6
+    doc.text(`Dirección de Envío: ${order.shippingAddress}`, margin, yPos)
+    yPos += 10
+
+    // Artículos
+    doc.setFontSize(12)
+    doc.setFont("helvetica", "bold")
+    doc.text("ARTÍCULOS", margin, yPos)
+    yPos += 7
+
+    // Tabla de artículos
+    doc.setFontSize(10)
+    doc.setFont("helvetica", "bold")
+    doc.text("Producto", margin, yPos)
+    doc.text("Cant.", margin + 100, yPos)
+    doc.text("Precio", margin + 120, yPos)
+    doc.text("Total", margin + 160, yPos)
+    yPos += 6
+
+    doc.setLineWidth(0.2)
+    doc.line(margin, yPos, pageWidth - margin, yPos)
+    yPos += 6
+
+    doc.setFont("helvetica", "normal")
+    order.items.forEach((item) => {
+      const itemTotal = item.price * item.quantity
+      const itemName = item.name.length > 40 ? item.name.substring(0, 37) + "..." : item.name
+      
+      doc.text(itemName, margin, yPos)
+      doc.text(item.quantity.toString(), margin + 100, yPos)
+      doc.text(`Bs. ${item.price.toLocaleString("es-BO")}`, margin + 120, yPos)
+      doc.text(`Bs. ${itemTotal.toLocaleString("es-BO")}`, margin + 160, yPos)
+      yPos += 6
+    })
+
+    yPos += 5
+    doc.line(margin, yPos, pageWidth - margin, yPos)
+    yPos += 10
+
+    // Resumen
+    doc.setFontSize(10)
+    doc.text("Subtotal:", margin + 100, yPos)
+    doc.text(`Bs. ${order.subtotal.toLocaleString("es-BO")}`, margin + 160, yPos)
+    yPos += 6
+
+    if (order.discount > 0) {
+      doc.text("Descuento:", margin + 100, yPos)
+      doc.text(`-Bs. ${order.discount.toLocaleString("es-BO")}`, margin + 160, yPos)
+      yPos += 6
+    }
+
+    doc.text("Envío:", margin + 100, yPos)
+    doc.text(`Bs. ${order.shipping.toLocaleString("es-BO")}`, margin + 160, yPos)
+    yPos += 8
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(12)
+    doc.text("TOTAL:", margin + 100, yPos)
+    doc.text(`Bs. ${order.total.toLocaleString("es-BO")}`, margin + 160, yPos)
+    yPos += 15
+
+    // Pie de página
+    doc.setFontSize(8)
+    doc.setFont("helvetica", "normal")
+    doc.text("Gracias por su compra!", pageWidth / 2, yPos, { align: "center" })
+    yPos += 5
+    doc.text("Este documento es un comprobante de su pedido.", pageWidth / 2, yPos, { align: "center" })
+    yPos += 5
+    doc.text(`Generado el ${new Date().toLocaleDateString("es-BO")} a las ${new Date().toLocaleTimeString("es-BO")}`, pageWidth / 2, yPos, { align: "center" })
+
+    // Descargar el PDF
+    doc.save(`recibo-pedido-${order.id}.pdf`)
   }
 
   const timeline = [
@@ -108,7 +245,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               </div>
 
               {/* Action */}
-              <button className="w-full py-3 border border-neutral-300 text-neutral-900 font-bold rounded-lg hover:bg-neutral-100">
+              <button 
+                onClick={downloadPDF}
+                className="w-full py-3 border border-neutral-300 text-neutral-900 font-bold rounded-lg hover:bg-neutral-100 transition-colors"
+              >
                 Descargar Recibo en PDF
               </button>
             </div>
@@ -162,9 +302,190 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         </div>
       </main>
 
-      <footer className="bg-neutral-900 text-white py-8 mt-16">
-        <div className="max-w-7xl mx-auto px-4 text-center text-neutral-400 text-sm">
-          <p>&copy; 2025 Ferretería Urkupina. Todos los derechos reservados.</p>
+      <footer className="bg-neutral-900 text-white py-12 mt-16">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {/* Contacto, Dirección y Mapa */}
+            <div>
+              <h3 className="font-bold text-lg mb-4">Contacto</h3>
+              <div className="space-y-3 text-sm text-neutral-300">
+                <div className="flex items-start gap-2">
+                  <MapPin className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-white">Dirección:</p>
+                    <p>Av. San Joaquín esquina Calle "A"</p>
+                    <p className="text-xs text-neutral-400">Lado del Colegio Miguel Antelo</p>
+                    <p className="text-xs text-neutral-400">Guayaramerin, Bolivia</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Phone className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-white">Teléfono:</p>
+                    <p>+591 68464378</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Mail className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-white">Email:</p>
+                    <p>info@urkupina.com</p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4">
+                <h4 className="font-semibold text-sm mb-2 text-white">Ubicación</h4>
+                <div className="w-full h-32 bg-neutral-800 rounded-lg overflow-hidden border border-neutral-700">
+                  <iframe
+                    src="https://www.google.com/maps?q=Av.+San+Joaquín+esquina+Calle+A,+Colegio+Miguel+Antelo,+Guayaramerin,+Bolivia&output=embed"
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    allowFullScreen
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    className="w-full h-full"
+                    title="Ubicación Ferretería Urkupina - Av. San Joaquín esquina Calle A, Guayaramerin"
+                  />
+                </div>
+                <p className="text-xs text-neutral-400 mt-2">Av. San Joaquín esquina Calle "A", lado del Colegio Miguel Antelo, Guayaramerin</p>
+              </div>
+            </div>
+
+            {/* Links del Sistema */}
+            <div>
+              <h3 className="font-bold text-lg mb-4">Enlaces</h3>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Inicio
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/catalogo" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Catálogo
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/categorias" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Categorías
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/sucursales" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Sucursales
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/contacto" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Contacto
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/account" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Mi Cuenta
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/cart" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Carrito
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Información Adicional */}
+            <div>
+              <h3 className="font-bold text-lg mb-4">Información</h3>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/politica-privacidad" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Política de Privacidad
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/terminos-condiciones" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Términos y Condiciones
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/preguntas-frecuentes" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Preguntas Frecuentes
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/sobre-nosotros" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Sobre Nosotros
+                  </Link>
+                </li>
+              </ul>
+              <div className="mt-6">
+                <h4 className="font-semibold text-sm mb-3 text-white">Horario de Atención</h4>
+                <div className="text-sm text-neutral-300 space-y-1">
+                  <p>Lunes - Viernes: 8:00 - 18:00</p>
+                  <p>Sábados: 9:00 - 14:00</p>
+                  <p>Domingos: Cerrado</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Redes Sociales */}
+            <div>
+              <h3 className="font-bold text-lg mb-4">Síguenos</h3>
+              <p className="text-sm text-neutral-300 mb-4">
+                Somos tu ferretería de confianza en Guayaramerin.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href="https://www.facebook.com/profile.php?id=61579523549381"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 bg-neutral-800 hover:bg-blue-600 rounded-full flex items-center justify-center transition-colors"
+                  aria-label="Facebook"
+                >
+                  <Facebook className="w-5 h-5" />
+                </a>
+                <a
+                  href="https://instagram.com/ferreteriaurkupina"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 bg-neutral-800 hover:bg-pink-600 rounded-full flex items-center justify-center transition-colors"
+                  aria-label="Instagram"
+                >
+                  <Instagram className="w-5 h-5" />
+                </a>
+                <a
+                  href="https://twitter.com/ferreteriaurkupina"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 bg-neutral-800 hover:bg-blue-400 rounded-full flex items-center justify-center transition-colors"
+                  aria-label="Twitter"
+                >
+                  <Twitter className="w-5 h-5" />
+                </a>
+                <a
+                  href="https://youtube.com/@ferreteriaurkupina"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 bg-neutral-800 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
+                  aria-label="YouTube"
+                >
+                  <Youtube className="w-5 h-5" />
+                </a>
+              </div>
+              <div className="mt-6">
+                <h4 className="font-semibold text-sm mb-2 text-white">Ferretería Urkupina</h4>
+                <p className="text-sm text-neutral-400 leading-relaxed">
+                  Somos tu ferretería de confianza en Guayaramerin.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Copyright */}
+          <div className="mt-8 pt-8 border-t border-neutral-800 text-center text-sm text-neutral-400">
+            <p>&copy; {new Date().getFullYear()} Ferretería Urkupina. Todos los derechos reservados.</p>
+          </div>
         </div>
       </footer>
     </>

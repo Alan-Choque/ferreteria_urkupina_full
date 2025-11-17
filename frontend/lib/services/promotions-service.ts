@@ -1,61 +1,130 @@
-import type { Coupon, ID } from "@/lib/contracts"
+import { api } from "@/lib/apiClient"
+import type { Coupon } from "@/lib/types/admin"
 
-let coupons: Coupon[] = [
-  {
-    id: "coup-1",
-    code: "BIENVENIDO10",
-    type: "PERCENT",
-    value: 10,
-    minTotal: 100000,
-    enabled: true,
-    validFrom: new Date().toISOString(),
-    validTo: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "coup-2",
-    code: "ENVIOGRATIS",
-    type: "FIXED",
-    value: 50000,
-    minTotal: 200000,
-    enabled: true,
-    validFrom: new Date().toISOString(),
-    validTo: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-]
+type PromotionRule = {
+  id?: number
+  tipo_regla: string
+  valor: number
+  descripcion?: string | null
+}
 
-let nextId = 3
+type PromotionResponse = {
+  id: number
+  nombre: string
+  descripcion?: string | null
+  fecha_inicio?: string | null
+  fecha_fin?: string | null
+  activo: boolean
+  reglas: PromotionRule[]
+}
+
+type PromotionListResponse = {
+  items: PromotionResponse[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type CouponPayload = {
+  code: string
+  type: "percentage" | "fixed"
+  value: number
+  description?: string
+  validFrom?: string | Date | null
+  validTo?: string | Date | null
+  enabled?: boolean
+}
+
+const DEFAULT_PAGE_SIZE = 200
+
+function parseDate(value?: string | Date | null): string | null {
+  if (!value) return null
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString()
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+  return parsed.toISOString()
+}
+
+function toCoupon(promotion: PromotionResponse): Coupon {
+  const firstRule = promotion.reglas[0]
+  const isPercentage = firstRule?.tipo_regla === "PORCENTAJE"
+  const value = firstRule ? Number(firstRule.valor) : 0
+
+  const validFromIso = promotion.fecha_inicio || new Date().toISOString()
+  const validToIso = promotion.fecha_fin || promotion.fecha_inicio || new Date().toISOString()
+
+  return {
+    id: promotion.id,
+    code: promotion.nombre,
+    type: isPercentage ? "percentage" : "fixed",
+    value,
+    minTotal: undefined,
+    enabled: promotion.activo,
+    validFrom: new Date(validFromIso),
+    validTo: new Date(validToIso),
+    usageLimit: undefined,
+    usageCount: 0,
+    createdAt: new Date(validFromIso),
+  }
+}
+
+function toPromotionRequest(payload: CouponPayload) {
+  const fechaInicio = parseDate(payload.validFrom) ?? new Date().toISOString()
+  const fechaFin = parseDate(payload.validTo)
+  const tipo_regla = payload.type === "percentage" ? "PORCENTAJE" : "MONTO"
+
+  return {
+    nombre: payload.code.trim(),
+    descripcion: payload.description?.trim() || null,
+    fecha_inicio: fechaInicio,
+    fecha_fin: fechaFin,
+    activo: payload.enabled ?? true,
+    reglas: [
+      {
+        tipo_regla,
+        valor: payload.value,
+        descripcion: payload.description?.trim() || null,
+      },
+    ],
+  }
+}
 
 export const promotionsService = {
-  async listCoupons() {
-    await new Promise((r) => setTimeout(r, 300))
-    return coupons
-  },
-
-  async getCoupon(code: string) {
-    await new Promise((r) => setTimeout(r, 200))
-    return coupons.find((c) => c.code === code && c.enabled)
-  },
-
-  async createCoupon(data: Omit<Coupon, "id">) {
-    await new Promise((r) => setTimeout(r, 400))
-    const newCoupon: Coupon = {
-      ...data,
-      id: `coup-${nextId++}`,
+  async listCoupons(active?: boolean): Promise<Coupon[]> {
+    const params = new URLSearchParams()
+    params.append("page_size", String(DEFAULT_PAGE_SIZE))
+    if (typeof active === "boolean") {
+      params.append("active", String(active))
     }
-    coupons.push(newCoupon)
-    return newCoupon
+    const response = await api.get<PromotionListResponse>(`/promotions?${params.toString()}`, {
+      requireAuth: true,
+    })
+    return response.items.map(toCoupon)
   },
 
-  async updateCoupon(id: ID, data: Partial<Coupon>) {
-    await new Promise((r) => setTimeout(r, 400))
-    const coupon = coupons.find((c) => c.id === id)
-    if (!coupon) throw new Error("Cupón no encontrado")
-    Object.assign(coupon, data)
-    return coupon
+  async getCoupon(code: string): Promise<Coupon | undefined> {
+    const coupons = await this.listCoupons()
+    return coupons.find((coupon) => coupon.code === code)
   },
 
-  async deleteCoupon(id: ID) {
-    await new Promise((r) => setTimeout(r, 300))
-    coupons = coupons.filter((c) => c.id !== id)
+  async createCoupon(payload: CouponPayload): Promise<Coupon> {
+    const body = toPromotionRequest(payload)
+    const response = await api.post<PromotionResponse>("/promotions", body, { requireAuth: true })
+    return toCoupon(response)
+  },
+
+  async updateCoupon(id: number, payload: CouponPayload): Promise<Coupon> {
+    const body = toPromotionRequest(payload)
+    const response = await api.put<PromotionResponse>(`/promotions/${id}`, body, { requireAuth: true })
+    return toCoupon(response)
+  },
+
+  async deleteCoupon(id: number): Promise<void> {
+    await api.delete(`/promotions/${id}`, { requireAuth: true })
   },
 }
+

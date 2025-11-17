@@ -219,11 +219,9 @@ Crea o edita `backend/.env` con este contenido:
 
 ```env
 # API Configuration
-API_V1_STR=/api/v1
+API_PREFIX=/api
 APP_ENV=dev
-
-# CORS Origins (JSON array o coma-separado)
-CORS_ORIGINS_RAW=["http://localhost:3000"]
+CORS_ORIGINS=["http://localhost:3000"]
 
 # Database Connection (SQL Server en Windows host)
 DATABASE_URL=mssql+pyodbc://ferre_app:F3rre!2025@host.docker.internal:1433/ferreteria_urkupina?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
@@ -516,9 +514,61 @@ curl http://localhost:8000/api/v1/auth/me `
 
 ### Inventario
 
+> Nota: todas las operaciones de inventario requieren un usuario con rol **ADMIN**.  
+> Obtén el token con `/api/v1/auth/login` y expórtalo como `ADMIN_TOKEN` para los ejemplos.
+
 ```powershell
-# Stock de una variante
-curl http://localhost:8000/api/v1/inventory/stock/1
+# Listado consolidado (requiere token ADMIN)
+$headers = @{
+  "Accept" = "application/json"
+  "Authorization" = "Bearer $Env:ADMIN_TOKEN"
+}
+curl http://localhost:8000/api/v1/inventory/stock `
+  -H "Authorization: $($headers.Authorization)"
+
+# Catálogo de almacenes
+curl http://localhost:8000/api/v1/inventory/warehouses `
+  -H "Authorization: $($headers.Authorization)"
+
+# Buscar variante (al menos 2 caracteres en q)
+curl "http://localhost:8000/api/v1/inventory/variants/search?q=per" `
+  -H "Authorization: $($headers.Authorization)"
+
+# Registrar ingreso manual de inventario
+curl -X POST http://localhost:8000/api/v1/inventory/entries `
+  -H "Content-Type: application/json" `
+  -H "Authorization: $($headers.Authorization)" `
+  -d '{
+        "almacen_id": 1,
+        "descripcion": "Ingreso manual",
+        "items": [
+          { "variante_id": 1, "cantidad": 2, "costo_unitario": 15.5 }
+        ]
+      }'
+
+# Transferir stock entre almacenes
+curl -X POST http://localhost:8000/api/v1/inventory/transfers `
+  -H "Content-Type: application/json" `
+  -H "Authorization: $($headers.Authorization)" `
+  -d '{
+        "almacen_origen_id": 1,
+        "almacen_destino_id": 2,
+        "descripcion": "Reubicación de stock",
+        "items": [
+          { "variante_id": 1, "cantidad": 1.5 }
+        ]
+      }'
+
+# Ajustar stock a un valor exacto (ideal para revertir pruebas)
+curl -X POST http://localhost:8000/api/v1/inventory/adjustments `
+  -H "Content-Type: application/json" `
+  -H "Authorization: $($headers.Authorization)" `
+  -d '{
+        "descripcion": "Reversión de prueba",
+        "items": [
+          { "variante_id": 1, "almacen_id": 1, "cantidad_nueva": 100 }
+        ]
+      }'
 ```
 
 ---
@@ -608,8 +658,8 @@ npm run gen:api
 
 **Solución**:
 1. Verificar `backend/.env` tiene:
-   ```env
-   CORS_ORIGINS_RAW=["http://localhost:3000"]
+```env
+CORS_ORIGINS=["http://localhost:3000"]
    ```
 2. Reiniciar contenedor:
    ```powershell
@@ -770,7 +820,7 @@ docker compose exec api python scripts/db_ping.py
 ```powershell
 cd backend
 docker compose exec api sh -c 'echo $DATABASE_URL'
-docker compose exec api sh -c 'echo $CORS_ORIGINS_RAW'
+docker compose exec api sh -c 'echo $CORS_ORIGINS'
 ```
 
 #### Verificar Health Endpoint

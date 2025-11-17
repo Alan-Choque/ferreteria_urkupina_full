@@ -148,7 +148,7 @@ export type SalesOrderItem = {
 
 export type SalesOrder = {
   id: ID
-  customerId?: ID
+  customerId?: ID | string
   status: OrderStatus
   items: SalesOrderItem[]
   totals: {

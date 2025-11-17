@@ -1,14 +1,26 @@
+from app.models.almacen import Almacen, Sucursal, Empresa
+from app.models.atributo import Atributo, ValorAtributo, ValorAtributoVariante
 from app.models.categoria import Categoria, CierreCategoria
 from app.models.marca import Marca
 from app.models.producto import Producto
 from app.models.variante_producto import VarianteProducto, UnidadMedida
 from app.models.imagen_producto import ImagenProducto
-from app.models.almacen import Almacen, Sucursal, Empresa
 from app.models.producto_almacen import ProductoAlmacen
 from app.models.usuario import Usuario, Rol, Permiso
 from app.models.cliente import Cliente
 from app.models.proveedor import Proveedor
+from app.models.compra import OrdenCompra, ItemOrdenCompra
+from app.models.venta import OrdenVenta, ItemOrdenVenta
+from app.models.reserva import Reserva, ItemReserva
+from app.models.promocion import Promocion, ReglaPromocion
 from app.models.idempotency import IdempotencyKey
+from app.models.inventario import (
+    LibroStock,
+    AjusteStock,
+    ItemAjusteStock,
+    TransferenciaStock,
+    ItemTransferenciaStock,
+)
 
 __all__ = [
     "Categoria",
@@ -25,9 +37,23 @@ __all__ = [
     "Usuario",
     "Rol",
     "Permiso",
-    "UsuarioRol",
-    "RolPermiso",
+    "OrdenCompra",
+    "ItemOrdenCompra",
+    "OrdenVenta",
+    "ItemOrdenVenta",
+    "Reserva",
+    "ItemReserva",
+    "Promocion",
+    "ReglaPromocion",
     "Cliente",
     "Proveedor",
     "IdempotencyKey",
+    "Atributo",
+    "ValorAtributo",
+    "ValorAtributoVariante",
+    "LibroStock",
+    "AjusteStock",
+    "ItemAjusteStock",
+    "TransferenciaStock",
+    "ItemTransferenciaStock",
 ]

@@ -9,21 +9,21 @@ const slides = [
     title: "Innovación y Precisión en Carpintería",
     description: "Las mejores herramientas profesionales para tus proyectos de construcción y carpintería.",
     cta: "Ver Productos",
-    link: "/productos",
+    link: "/catalogo",
   },
   {
     id: 2,
     title: "Equipos de Última Generación",
     description: "Tecnología avanzada para profesionales exigentes. Calidad garantizada.",
     cta: "Explorar",
-    link: "/equipos",
+    link: "/catalogo",
   },
   {
     id: 3,
     title: "Ofertas Especiales",
     description: "Descuentos increíbles en herramientas seleccionadas. No te lo pierdas.",
     cta: "Ver Ofertas",
-    link: "/ofertas",
+    link: "/catalogo",
   },
 ]
 
@@ -55,7 +55,7 @@ export default function Hero() {
           <p className="text-lg md:text-xl text-neutral-200 mb-8 leading-relaxed">{slides[currentSlide].description}</p>
           <a
             href={slides[currentSlide].link}
-            className="inline-block bg-red-600 text-white font-bold px-8 py-4 rounded hover:bg-red-700 transition-colors"
+            className="inline-block bg-orange-600 text-white font-bold px-8 py-4 rounded hover:bg-orange-700 transition-colors"
           >
             {slides[currentSlide].cta}
           </a>
@@ -89,7 +89,7 @@ export default function Hero() {
             key={index}
             onClick={() => setCurrentSlide(index)}
             className={`w-3 h-3 rounded-full transition-colors ${
-              index === currentSlide ? "bg-red-600" : "bg-white/50"
+              index === currentSlide ? "bg-orange-600" : "bg-white/50"
             }`}
             aria-label={`Ir a diapositiva ${index + 1}`}
             aria-selected={index === currentSlide}

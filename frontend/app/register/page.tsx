@@ -4,16 +4,20 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Eye, EyeOff, Loader2 } from "lucide-react"
+import { Eye, EyeOff, Loader2, UserPlus, Facebook, Instagram, Twitter, Youtube, MapPin, Phone, Mail } from "lucide-react"
 import Link from "next/link"
 import { authService } from "@/lib/services/auth-service"
 import { useFormSubmit } from "@/hooks/use-form-submit"
+import Header from "@/components/header"
+import MegaMenu from "@/components/mega-menu"
 
 type FormData = {
   username: string
   email: string
   password: string
   confirmPassword: string
+  nitCi: string
+  telefono: string
   acceptTerms: boolean
 }
 
@@ -27,6 +31,8 @@ export default function RegisterPage() {
     email: "",
     password: "",
     confirmPassword: "",
+    nitCi: "",
+    telefono: "",
     acceptTerms: false,
   })
 
@@ -128,18 +134,20 @@ export default function RegisterPage() {
   }
 
   const { submit, isSubmitting } = useFormSubmit(
-    async (data: { username: string; email: string; password: string }) => {
+    async (data: { username: string; email: string; password: string; nitCi: string; telefono: string }) => {
       const response = await authService.register({
         username: data.username,
         email: data.email,
         password: data.password,
+        nitCi: data.nitCi,
+        telefono: data.telefono,
       })
       return response
     },
     {
       debounceMs: 300,
-      onSuccess: (response) => {
-        router.push("/admin")
+      onSuccess: () => {
+        router.push("/login?registered=1")
       },
       onError: (error) => {
         setErrors({ submit: error.message })
@@ -156,6 +164,8 @@ export default function RegisterPage() {
       "email",
       "password",
       "confirmPassword",
+      "nitCi",
+      "telefono",
       "acceptTerms",
     ]
 
@@ -193,6 +203,8 @@ export default function RegisterPage() {
       username: formData.username,
       email: formData.email,
       password: formData.password,
+      nitCi: formData.nitCi,
+      telefono: formData.telefono,
     })
   }
 
@@ -204,16 +216,64 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-neutral-50 pt-8 pb-16">
-      <div className="max-w-2xl mx-auto px-4">
-        <h1 className="text-4xl font-bold text-neutral-900 mb-12 text-center">Crear nueva cuenta de cliente</h1>
+    <>
+      <Header />
+      <MegaMenu />
+      <main className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-neutral-100">
+      <div className="max-w-7xl mx-auto px-3 py-2 md:py-2.5 lg:py-3">
+        {/* Contenido principal */}
+        <div className="max-w-[860px] mx-auto">
+          {/* Mensaje de bienvenida */}
+          <div className="text-center mb-2">
+            <h1 className="text-lg md:text-xl font-bold text-neutral-900 mb-0.5">
+              ¡Únete a nosotros!
+            </h1>
+            <p className="text-[12px] text-neutral-600 max-w-2xl mx-auto">
+              Crea tu cuenta y disfruta de todos los beneficios de Ferretería Urkupina en Guayaramerin
+            </p>
+          </div>
 
-        <div className="bg-white border border-neutral-200 rounded-lg p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="max-w-[720px] mx-auto">
+            {/* Register Form */}
+            <div className="bg-white border border-neutral-200 rounded-lg p-3.5 md:p-4.5 shadow-lg">
+              <div className="flex flex-col items-center mb-1.5 w-full">
+                <div className="flex items-center gap-1.5 bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 shadow-sm w-full">
+                  <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow">
+                    <img
+                      src="/logo-urkupina.png"
+                      alt="Logo Ferretería Urkupina"
+                      className="h-8 object-contain"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.style.display = "none"
+                      }}
+                    />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-[10px] uppercase tracking-[0.28em] text-orange-500">Crea tu cuenta en</p>
+                    <p className="text-[15px] font-semibold text-neutral-900 leading-tight">Ferretería Urkupina</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[9.5px] text-neutral-600 mb-2 w-full">
+                {[
+                  "Beneficios exclusivos y alertas de stock.",
+                  "Seguimiento de pedidos y descargas de comprobantes.",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5">
+                    <span className="w-2 h-2 rounded-full bg-orange-500" />
+                    <span className="leading-relaxed">{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-2.5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             {/* Username */}
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-neutral-900 mb-2">
-                Nombre de usuario <span className="text-red-600">*</span>
+              <label htmlFor="username" className="block text-[13px] font-medium text-neutral-900 mb-1">
+                Nombre de usuario <span className="text-orange-600">*</span>
               </label>
               <input
                 id="username"
@@ -223,7 +283,7 @@ export default function RegisterPage() {
                 onBlur={() => handleBlur("username")}
                 aria-invalid={touched.username && !!errors.username}
                 aria-describedby={errors.username ? "username-error" : undefined}
-                className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors ${
+                className={`w-full px-3.5 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-600 focus:border-transparent transition-colors ${
                   touched.username && errors.username ? "border-red-600 bg-red-50" : "border-neutral-300"
                 }`}
                 placeholder="usuario123"
@@ -237,8 +297,8 @@ export default function RegisterPage() {
 
               {/* Email */}
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-neutral-900 mb-2">
-                  Correo electrónico <span className="text-red-600">*</span>
+                <label htmlFor="email" className="block text-[13px] font-medium text-neutral-900 mb-1">
+                  Correo electrónico <span className="text-orange-600">*</span>
                 </label>
                 <input
                   id="email"
@@ -248,7 +308,7 @@ export default function RegisterPage() {
                   onBlur={() => handleBlur("email")}
                   aria-invalid={touched.email && !!errors.email}
                   aria-describedby={errors.email ? "email-error" : undefined}
-                  className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors ${
+                  className={`w-full px-3.5 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-600 focus:border-transparent transition-colors ${
                     touched.email && errors.email ? "border-red-600 bg-red-50" : "border-neutral-300"
                   }`}
                   placeholder="ejemplo@correo.com"
@@ -262,8 +322,8 @@ export default function RegisterPage() {
 
               {/* Password */}
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-neutral-900 mb-2">
-                  Contraseña <span className="text-red-600">*</span>
+                <label htmlFor="password" className="block text-[13px] font-medium text-neutral-900 mb-1">
+                  Contraseña <span className="text-orange-600">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -274,7 +334,7 @@ export default function RegisterPage() {
                     onBlur={() => handleBlur("password")}
                     aria-invalid={touched.password && !!errors.password}
                     aria-describedby={errors.password ? "password-error" : undefined}
-                    className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors pr-12 ${
+                    className={`w-full px-3.5 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-600 focus:border-transparent transition-colors pr-11 ${
                       touched.password && errors.password ? "border-red-600 bg-red-50" : "border-neutral-300"
                     }`}
                     placeholder="Crea una contraseña segura"
@@ -316,8 +376,8 @@ export default function RegisterPage() {
 
               {/* Confirm Password */}
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-neutral-900 mb-2">
-                  Confirmar contraseña <span className="text-red-600">*</span>
+                <label htmlFor="confirmPassword" className="block text-[13px] font-medium text-neutral-900 mb-1">
+                    Confirmar contraseña <span className="text-orange-600">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -328,7 +388,7 @@ export default function RegisterPage() {
                     onBlur={() => handleBlur("confirmPassword")}
                     aria-invalid={touched.confirmPassword && !!errors.confirmPassword}
                     aria-describedby={errors.confirmPassword ? "confirmPassword-error" : undefined}
-                    className={`w-full px-4 py-2.5 border rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-colors pr-12 ${
+                    className={`w-full px-3.5 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-600 focus:border-transparent transition-colors pr-11 ${
                       touched.confirmPassword && errors.confirmPassword
                         ? "border-red-600 bg-red-50"
                         : "border-neutral-300"
@@ -351,10 +411,60 @@ export default function RegisterPage() {
                 )}
               </div>
 
-            {/* Terms */}
-            <div className="space-y-4 pt-5 border-t border-neutral-200">
+              {/* CI/NIT */}
+              <div>
+                <label htmlFor="nitCi" className="block text-[13px] font-medium text-neutral-900 mb-1">
+                  CI/NIT <span className="text-orange-600">*</span>
+                </label>
+                <input
+                  id="nitCi"
+                  type="text"
+                  value={formData.nitCi}
+                  onChange={(e) => handleChange("nitCi", e.target.value)}
+                  onBlur={() => handleBlur("nitCi")}
+                  aria-invalid={touched.nitCi && !!errors.nitCi}
+                  aria-describedby={errors.nitCi ? "nitCi-error" : undefined}
+                  className={`w-full px-3.5 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-600 focus:border-transparent transition-colors ${
+                    touched.nitCi && errors.nitCi ? "border-red-600 bg-red-50" : "border-neutral-300"
+                  }`}
+                  placeholder="Ej: 12345678 o 1234567890123"
+                />
+                {touched.nitCi && errors.nitCi && (
+                  <p id="nitCi-error" className="text-red-600 text-sm mt-1.5 font-medium">
+                    {errors.nitCi}
+                  </p>
+                )}
+              </div>
 
-              <label className="flex items-start gap-3 cursor-pointer">
+              {/* Teléfono */}
+              <div>
+                <label htmlFor="telefono" className="block text-[13px] font-medium text-neutral-900 mb-1">
+                  Teléfono <span className="text-orange-600">*</span>
+                </label>
+                <input
+                  id="telefono"
+                  type="tel"
+                  value={formData.telefono}
+                  onChange={(e) => handleChange("telefono", e.target.value)}
+                  onBlur={() => handleBlur("telefono")}
+                  aria-invalid={touched.telefono && !!errors.telefono}
+                  aria-describedby={errors.telefono ? "telefono-error" : undefined}
+                  className={`w-full px-3.5 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-600 focus:border-transparent transition-colors ${
+                    touched.telefono && errors.telefono ? "border-red-600 bg-red-50" : "border-neutral-300"
+                  }`}
+                  placeholder="Ej: +591 70000000"
+                />
+                {touched.telefono && errors.telefono && (
+                  <p id="telefono-error" className="text-red-600 text-sm mt-1.5 font-medium">
+                    {errors.telefono}
+                  </p>
+                )}
+              </div>
+                </div>
+
+            {/* Terms */}
+            <div className="space-y-2.5 pt-2.5 border-t border-neutral-200">
+              <label className="flex items-start gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={formData.acceptTerms}
@@ -362,18 +472,18 @@ export default function RegisterPage() {
                   onBlur={() => handleBlur("acceptTerms")}
                   aria-invalid={touched.acceptTerms && !!errors.acceptTerms}
                   aria-describedby={errors.acceptTerms ? "terms-error" : undefined}
-                  className="w-4 h-4 mt-1 accent-red-600 cursor-pointer flex-shrink-0"
+                  className="w-4 h-4 mt-0.5 accent-orange-600 cursor-pointer flex-shrink-0"
                 />
                 <span className="text-sm text-neutral-700">
                   Acepto los{" "}
-                  <a href="#" className="text-red-600 hover:text-red-700 font-medium">
+                  <a href="#" className="text-orange-600 hover:text-orange-700 font-medium">
                     Términos y Condiciones
                   </a>{" "}
                   y la{" "}
-                  <a href="#" className="text-red-600 hover:text-red-700 font-medium">
+                  <a href="#" className="text-orange-600 hover:text-orange-700 font-medium">
                     Política de Privacidad
                   </a>
-                  <span className="text-red-600">*</span>
+                  <span className="text-orange-600">*</span>
                 </span>
               </label>
               {touched.acceptTerms && errors.acceptTerms && (
@@ -391,15 +501,14 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {/* Submit Button */}
-            <div className="pt-5 border-t border-neutral-200 space-y-4">
+              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className={`w-full py-2.5 font-semibold rounded transition-colors flex items-center justify-center gap-2 ${
+                className={`w-full py-2.5 font-semibold rounded-lg transition-all flex items-center justify-center gap-2 shadow-md ${
                   isSubmitting
                     ? "bg-neutral-300 text-neutral-500 cursor-not-allowed"
-                    : "bg-red-600 text-white hover:bg-red-700"
+                    : "bg-orange-600 text-white hover:bg-orange-700 hover:shadow-lg transform hover:scale-[1.02]"
                 }`}
               >
                 {isSubmitting ? (
@@ -408,22 +517,215 @@ export default function RegisterPage() {
                     Creando cuenta...
                   </>
                 ) : (
-                  "Crear cuenta"
+                  <>
+                    <UserPlus className="w-5 h-5" />
+                    Crear cuenta y continuar
+                  </>
                 )}
               </button>
 
-              <p className="text-center text-xs text-neutral-600">* Campos obligatorios</p>
+              <p className="text-center text-xs text-neutral-500">* Campos obligatorios</p>
 
               <p className="text-center text-sm text-neutral-700">
                 ¿Ya tienes cuenta?{" "}
-                <Link href="/login" className="text-red-600 hover:text-red-700 font-medium">
+                <Link href="/login" className="text-orange-600 hover:text-orange-700 font-medium">
                   Inicia sesión
                 </Link>
               </p>
+            </form>
             </div>
-          </form>
+          </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="bg-neutral-900 text-white py-12 mt-16">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {/* Contacto, Dirección y Mapa */}
+            <div>
+              <h3 className="font-bold text-lg mb-4">Contacto</h3>
+              <div className="space-y-3 text-sm text-neutral-300">
+                <div className="flex items-start gap-2">
+                  <MapPin className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-white">Dirección:</p>
+                    <p>Av. San Joaquín esquina Calle "A"</p>
+                    <p className="text-xs text-neutral-400">Lado del Colegio Miguel Antelo</p>
+                    <p className="text-xs text-neutral-400">Guayaramerin, Bolivia</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Phone className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-white">Teléfono:</p>
+                    <p>+591 68464378</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Mail className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-white">Email:</p>
+                    <p>info@urkupina.com</p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4">
+                <h4 className="font-semibold text-sm mb-2 text-white">Ubicación</h4>
+                <div className="w-full h-32 bg-neutral-800 rounded-lg overflow-hidden border border-neutral-700">
+                  <iframe
+                    src="https://www.google.com/maps?q=Av.+San+Joaquín+esquina+Calle+A,+Colegio+Miguel+Antelo,+Guayaramerin,+Bolivia&output=embed"
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    allowFullScreen
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    className="w-full h-full"
+                    title="Ubicación Ferretería Urkupina - Av. San Joaquín esquina Calle A, Guayaramerin"
+                  />
+                </div>
+                <p className="text-xs text-neutral-400 mt-2">Av. San Joaquín esquina Calle "A", lado del Colegio Miguel Antelo, Guayaramerin</p>
+              </div>
+            </div>
+
+            {/* Links del Sistema */}
+            <div>
+              <h3 className="font-bold text-lg mb-4">Enlaces</h3>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Inicio
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/catalogo" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Catálogo
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/categorias" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Categorías
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/sucursales" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Sucursales
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/contacto" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Contacto
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/account" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Mi Cuenta
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/cart" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Carrito
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Información Adicional */}
+            <div>
+              <h3 className="font-bold text-lg mb-4">Información</h3>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/politica-privacidad" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Política de Privacidad
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/terminos-condiciones" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Términos y Condiciones
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/preguntas-frecuentes" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Preguntas Frecuentes
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/sobre-nosotros" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                    Sobre Nosotros
+                  </Link>
+                </li>
+              </ul>
+              <div className="mt-6">
+                <h4 className="font-semibold text-sm mb-3 text-white">Horario de Atención</h4>
+                <div className="text-sm text-neutral-300 space-y-1">
+                  <p>Lunes - Viernes: 8:00 - 18:00</p>
+                  <p>Sábados: 9:00 - 14:00</p>
+                  <p>Domingos: Cerrado</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Redes Sociales */}
+            <div>
+              <h3 className="font-bold text-lg mb-4">Síguenos</h3>
+              <p className="text-sm text-neutral-300 mb-4">
+                Mantente al día con nuestras ofertas y novedades
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href="https://www.facebook.com/profile.php?id=61579523549381"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 bg-neutral-800 hover:bg-blue-600 rounded-full flex items-center justify-center transition-colors"
+                  aria-label="Facebook"
+                >
+                  <Facebook className="w-5 h-5" />
+                </a>
+                <a
+                  href="https://instagram.com/ferreteriaurkupina"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 bg-neutral-800 hover:bg-pink-600 rounded-full flex items-center justify-center transition-colors"
+                  aria-label="Instagram"
+                >
+                  <Instagram className="w-5 h-5" />
+                </a>
+                <a
+                  href="https://twitter.com/ferreteriaurkupina"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 bg-neutral-800 hover:bg-blue-400 rounded-full flex items-center justify-center transition-colors"
+                  aria-label="Twitter"
+                >
+                  <Twitter className="w-5 h-5" />
+                </a>
+                <a
+                  href="https://youtube.com/@ferreteriaurkupina"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 bg-neutral-800 hover:bg-orange-600 rounded-full flex items-center justify-center transition-colors"
+                  aria-label="YouTube"
+                >
+                  <Youtube className="w-5 h-5" />
+                </a>
+              </div>
+              <div className="mt-6">
+                <h4 className="font-semibold text-sm mb-2 text-white">Ferretería Urkupina</h4>
+                <p className="text-sm text-neutral-400 leading-relaxed">
+                  Somos tu ferretería de confianza en Guayaramerin.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Copyright */}
+          <div className="mt-8 pt-8 border-t border-neutral-800 text-center text-sm text-neutral-400">
+            <p>&copy; {new Date().getFullYear()} Ferretería Urkupina. Todos los derechos reservados.</p>
+          </div>
+        </div>
+      </footer>
     </main>
+    </>
   )
 }

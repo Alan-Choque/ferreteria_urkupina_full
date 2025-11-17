@@ -25,6 +25,8 @@ class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, description="Nombre de usuario")
     email: EmailStr = Field(..., description="Email del usuario")
     password: str = Field(..., min_length=8, max_length=100, description="Contraseña (mínimo 8 caracteres)")
+    nit_ci: str | None = Field(None, max_length=20, description="CI o NIT del cliente")
+    telefono: str | None = Field(None, max_length=20, description="Teléfono del cliente")
     
     @field_validator('username')
     @classmethod

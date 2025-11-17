@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Header from "@/components/header"
 import MegaMenu from "@/components/mega-menu"
+import FooterFerretek from "@/components/footer-ferretek"
 
 export default function ContactPage() {
   const [formData, setFormData] = useState({
@@ -221,11 +222,7 @@ export default function ContactPage() {
         </div>
       </main>
 
-      <footer className="bg-neutral-900 text-white py-8 mt-16">
-        <div className="max-w-7xl mx-auto px-4 text-center text-neutral-400 text-sm">
-          <p>&copy; 2025 Ferretería Urkupina. Todos los derechos reservados.</p>
-        </div>
-      </footer>
+      <FooterFerretek />
     </>
   )
 }

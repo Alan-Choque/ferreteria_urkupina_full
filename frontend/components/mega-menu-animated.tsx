@@ -7,6 +7,11 @@ import { ChevronRight } from "lucide-react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 
+const NUESTROS_PRODUCTOS = {
+  name: "Nuestros Productos",
+  href: "/catalogo",
+}
+
 const CATEGORIES = [
   {
     name: "Herramientas de Construcción",
@@ -150,6 +155,7 @@ export default function MegaMenuAnimated() {
   const [hoveredSubmenu, setHoveredSubmenu] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState({ left: 0, width: 0 })
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const submenuTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const getActiveCategoryIndex = () => {
@@ -160,6 +166,7 @@ export default function MegaMenuAnimated() {
   useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (submenuTimeoutRef.current) clearTimeout(submenuTimeoutRef.current)
     }
   }, [])
 
@@ -184,10 +191,19 @@ export default function MegaMenuAnimated() {
   }
 
   const handleMouseLeave = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(() => {
       setActiveCategory(null)
       setHoveredSubmenu(null)
-    }, 150)
+    }, 100)
+  }
+
+  const handleMouseLeaveItem = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => {
+      setActiveCategory(null)
+      setHoveredSubmenu(null)
+    }, 100)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
@@ -205,9 +221,31 @@ export default function MegaMenuAnimated() {
   return (
     <nav className="relative bg-neutral-900" aria-label="Navegación principal" onMouseLeave={handleMouseLeave}>
       <div className="mx-auto max-w-7xl px-4">
-        <ul className="flex items-center gap-1 overflow-x-auto">
+        {/* Fila superior: Nuestros Productos */}
+        <div className="border-b border-neutral-700 flex justify-center">
+          <Link
+            href={NUESTROS_PRODUCTOS.href}
+            className={`block whitespace-nowrap px-4 py-3 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white ${
+              pathname.startsWith(NUESTROS_PRODUCTOS.href) ? "bg-[var(--storefront-brand)]" : "hover:bg-[var(--storefront-brand)]"
+            }`}
+            onMouseEnter={() => {
+              // Cerrar cualquier menú abierto cuando se hace hover sobre "Nuestros Productos"
+              if (timeoutRef.current) clearTimeout(timeoutRef.current)
+              setActiveCategory(null)
+              setHoveredSubmenu(null)
+            }}
+          >
+            {NUESTROS_PRODUCTOS.name}
+          </Link>
+        </div>
+        {/* Fila inferior: Categorías */}
+        <ul className="flex items-center justify-center gap-1 overflow-x-auto">
           {CATEGORIES.map((category, index) => (
-            <li key={category.name} className="relative">
+            <li 
+              key={category.name} 
+              className="relative"
+              onMouseLeave={handleMouseLeaveItem}
+            >
               <Link
                 href={category.href}
                 ref={(el) => {
@@ -218,6 +256,7 @@ export default function MegaMenuAnimated() {
                   activeCategoryIndex === index ? "bg-[var(--storefront-brand)]" : "hover:bg-[var(--storefront-brand)]"
                 }`}
                 onMouseEnter={() => handleMouseEnter(index)}
+                onMouseLeave={handleMouseLeaveItem}
                 onKeyDown={(e) => handleKeyDown(e as any, index)}
               >
                 {category.name}
@@ -228,7 +267,7 @@ export default function MegaMenuAnimated() {
       </div>
 
       <AnimatePresence>
-        {activeCategory !== null && currentCategory && (
+        {activeCategory !== null && currentCategory && currentCategory.items.length > 0 && (
           <motion.div
             variants={{
               hidden: { opacity: 0, y: -4 },
@@ -238,34 +277,58 @@ export default function MegaMenuAnimated() {
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="absolute top-full z-50 bg-white shadow-lg border border-neutral-200"
+            className="absolute top-full mt-1 z-50 bg-white shadow-lg border border-neutral-300 border-l-2 border-l-[var(--storefront-brand)]"
             style={{
               left: `${menuPosition.left}px`,
-              width: "350px",
+              width: `${menuPosition.width}px`,
             }}
             onMouseEnter={() => {
               if (timeoutRef.current) clearTimeout(timeoutRef.current)
             }}
-            onMouseLeave={handleMouseLeave}
+            onMouseLeave={() => {
+              if (timeoutRef.current) clearTimeout(timeoutRef.current)
+              timeoutRef.current = setTimeout(() => {
+                setActiveCategory(null)
+                setHoveredSubmenu(null)
+              }, 100)
+            }}
           >
-            <div className="p-4">
-              <div className="space-y-1">
-                {currentCategory.items.map((item) => (
-                  <div key={item.name} className="relative">
+            <div className="p-3">
+              <div className="space-y-0.5">
+                {currentCategory.items.map((item, idx) => (
+                  <div 
+                    key={item.name} 
+                    className="relative"
+                    onMouseEnter={() => {
+                      if (item.hasSubmenu) {
+                        if (submenuTimeoutRef.current) clearTimeout(submenuTimeoutRef.current)
+                        setHoveredSubmenu(item.name)
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      // Delay para permitir que el cursor se mueva al submenu
+                      if (item.hasSubmenu) {
+                        submenuTimeoutRef.current = setTimeout(() => {
+                          setHoveredSubmenu(null)
+                        }, 200)
+                      }
+                    }}
+                  >
                     {item.hasSubmenu ? (
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-between rounded px-3 py-2 text-sm text-neutral-800 transition-colors hover:bg-neutral-100"
-                        onMouseEnter={() => setHoveredSubmenu(item.name)}
-                        onMouseLeave={() => setHoveredSubmenu(null)}
-                      >
-                        <span>{item.name}</span>
-                        <ChevronRight className="h-4 w-4" style={{ color: "var(--storefront-brand)" }} />
-                      </button>
+                      <div className="flex w-full items-center justify-between rounded px-3 py-2 text-[13px] text-neutral-800 transition-colors hover:bg-neutral-100 group">
+                        <Link
+                          href={item.href}
+                          className="flex-1"
+                          onClick={() => setActiveCategory(null)}
+                        >
+                          <span>{item.name}</span>
+                        </Link>
+                        <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 ml-2" style={{ color: "var(--storefront-brand)" }} />
+                      </div>
                     ) : (
                       <Link
                         href={item.href}
-                        className="flex w-full items-center justify-between rounded px-3 py-2 text-sm text-neutral-800 transition-colors hover:bg-neutral-100"
+                        className="flex w-full items-center justify-between rounded px-3 py-2 text-[13px] text-neutral-800 transition-colors hover:bg-neutral-100"
                         onClick={() => setActiveCategory(null)}
                       >
                         <span>{item.name}</span>
@@ -278,21 +341,38 @@ export default function MegaMenuAnimated() {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -8 }}
                         transition={{ duration: 0.08 }}
-                        className="absolute left-full top-0 ml-2 flex flex-col gap-2 w-max"
-                        onMouseEnter={() => setHoveredSubmenu(item.name)}
-                        onMouseLeave={() => setHoveredSubmenu(null)}
+                        className="absolute left-full top-0 ml-2 flex flex-col gap-2.5 w-max z-50"
+                        onMouseEnter={() => {
+                          // Cancelar el timeout cuando el cursor entra al submenu
+                          if (submenuTimeoutRef.current) clearTimeout(submenuTimeoutRef.current)
+                          setHoveredSubmenu(item.name)
+                        }}
+                        onMouseLeave={() => {
+                          // Cerrar el submenu cuando el cursor sale completamente
+                          submenuTimeoutRef.current = setTimeout(() => {
+                            setHoveredSubmenu(null)
+                          }, 150)
+                        }}
                       >
                         {item.submenu.map((sub) => (
                           <Link
                             key={sub.name}
                             href={sub.href}
-                            className="inline-block rounded px-4 py-2 text-xs font-semibold text-white transition-colors hover:opacity-80"
+                            className="inline-block rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90 whitespace-nowrap"
                             style={{ backgroundColor: "var(--storefront-cta)" }}
+                            onClick={() => {
+                              setActiveCategory(null)
+                              setHoveredSubmenu(null)
+                            }}
                           >
                             {sub.name}
                           </Link>
                         ))}
                       </motion.div>
+                    )}
+                    
+                    {idx < currentCategory.items.length - 1 && (
+                      <div className="my-1 mx-2 h-px bg-neutral-300" />
                     )}
                   </div>
                 ))}

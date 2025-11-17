@@ -5,11 +5,17 @@ import { settingsService } from "@/lib/services/settings-service"
 import { Plus, Trash2, Save } from "lucide-react"
 import { motion } from "framer-motion"
 import type { CompanySettings } from "@/lib/types/admin"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+
+type TabType = "company" | "branches" | "email"
 
 export default function SettingsPage() {
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const router = useRouter()
   const [settings, setSettings] = useState<CompanySettings | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<"company" | "branches" | "email">("company")
+  const [tab, setTab] = useState<TabType>("company")
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -78,6 +84,20 @@ export default function SettingsPage() {
     }
   }
 
+  useEffect(() => {
+    const value = searchParams.get("tab")
+    if (value === "company" || value === "branches" || value === "email") {
+      setTab(value)
+    } else {
+      setTab("company")
+    }
+  }, [searchParams])
+
+  const changeTab = (value: TabType) => {
+    setTab(value)
+    router.replace(`${pathname}?tab=${value}`, { scroll: false })
+  }
+
   if (loading) return <div className="text-gray-400">Cargando...</div>
   if (!settings) return <div className="text-gray-400">Error cargando configuración</div>
 
@@ -95,12 +115,14 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex gap-2 border-b border-gray-700">
-        {["company", "branches", "email"].map((t) => (
+        {(["company", "branches", "email"] as TabType[]).map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t as any)}
-            className={`px-4 py-2 font-medium transition-colors ${
-              tab === t ? "text-red-500 border-b-2 border-red-500" : "text-gray-400 hover:text-white"
+            onClick={() => changeTab(t)}
+            className={`px-4 py-2 font-medium rounded transition-colors ${
+              tab === t
+                ? "text-red-500 border-b-2 border-red-500"
+                : "text-gray-400 hover:text-gray-100 hover:bg-gray-700/60"
             }`}
           >
             {t === "company" ? "Empresa" : t === "branches" ? "Sucursales" : "Plantillas Email"}
@@ -210,7 +232,7 @@ export default function SettingsPage() {
           ))}
           <button
             onClick={handleAddBranch}
-            className="w-full bg-gray-800 border-2 border-dashed border-gray-700 rounded-lg p-4 text-gray-400 hover:text-white transition-colors flex items-center justify-center gap-2"
+            className="w-full bg-gray-800 border-2 border-dashed border-gray-700 rounded-lg p-4 text-gray-300 hover:bg-gray-700/60 hover:text-gray-100 transition-colors flex items-center justify-center gap-2"
           >
             <Plus size={20} />
             Agregar Sucursal

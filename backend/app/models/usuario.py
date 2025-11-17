@@ -42,6 +42,24 @@ class Usuario(Base):
         secondary=usuarios_roles_table,
         back_populates="usuarios"
     )
+    ordenes_compra: Mapped[list["OrdenCompra"]] = relationship(
+        "OrdenCompra",
+        back_populates="usuario",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    ordenes_venta: Mapped[list["OrdenVenta"]] = relationship(
+        "OrdenVenta",
+        back_populates="usuario",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    reservas: Mapped[list["Reserva"]] = relationship(
+        "Reserva",
+        back_populates="usuario",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class Rol(Base):

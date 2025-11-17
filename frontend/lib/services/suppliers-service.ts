@@ -1,59 +1,49 @@
-import type { Supplier, ID } from "@/lib/contracts"
+import { api } from "@/lib/apiClient"
 
-let suppliers: Supplier[] = [
-  {
-    id: "supp-1",
-    name: "BOSCH Bolivia",
-    contact: "Carlos López",
-    phone: "+591 2 1234567",
-    email: "sales@bosch.com.bo",
-    terms: "Net 30",
-    rating: 4.5,
-  },
-  {
-    id: "supp-2",
-    name: "DeWALT Latinoamérica",
-    contact: "María García",
-    phone: "+591 71234567",
-    email: "distribuidora@dewalt.la",
-    terms: "Net 15",
-    rating: 4.8,
-  },
-]
+export interface AdminSupplier {
+  id: number
+  nombre: string
+  nit_ci?: string | null
+  telefono?: string | null
+  correo?: string | null
+  direccion?: string | null
+  fecha_registro: string
+}
 
-let nextId = 3
+export interface SupplierListResponse {
+  items: AdminSupplier[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface SupplierPayload {
+  nombre: string
+  nit_ci?: string | null
+  telefono?: string | null
+  correo?: string | null
+  direccion?: string | null
+}
 
 export const suppliersService = {
-  async listSuppliers() {
-    await new Promise((r) => setTimeout(r, 300))
-    return suppliers
+  async listSuppliers(): Promise<AdminSupplier[]> {
+    const response = await api.get<SupplierListResponse>("/suppliers")
+    return response.items
   },
 
-  async getSupplier(id: ID) {
-    await new Promise((r) => setTimeout(r, 200))
-    return suppliers.find((s) => s.id === id)
+  async getSupplier(id: number): Promise<AdminSupplier> {
+    return api.get<AdminSupplier>(`/suppliers/${id}`)
   },
 
-  async createSupplier(data: Omit<Supplier, "id">) {
-    await new Promise((r) => setTimeout(r, 400))
-    const newSupplier: Supplier = {
-      ...data,
-      id: `supp-${nextId++}`,
-    }
-    suppliers.push(newSupplier)
-    return newSupplier
+  async createSupplier(data: SupplierPayload): Promise<AdminSupplier> {
+    return api.post<AdminSupplier>("/suppliers", data)
   },
 
-  async updateSupplier(id: ID, data: Partial<Supplier>) {
-    await new Promise((r) => setTimeout(r, 400))
-    const supplier = suppliers.find((s) => s.id === id)
-    if (!supplier) throw new Error("Proveedor no encontrado")
-    Object.assign(supplier, data)
-    return supplier
+  async updateSupplier(id: number, data: SupplierPayload): Promise<AdminSupplier> {
+    return api.put<AdminSupplier>(`/suppliers/${id}`, data)
   },
 
-  async deleteSupplier(id: ID) {
-    await new Promise((r) => setTimeout(r, 300))
-    suppliers = suppliers.filter((s) => s.id !== id)
+  async deleteSupplier(id: number): Promise<void> {
+    await api.delete(`/suppliers/${id}`)
   },
 }

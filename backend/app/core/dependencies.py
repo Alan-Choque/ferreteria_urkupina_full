@@ -19,9 +19,13 @@ async def get_current_user(
         payload = decode_token(token)
         if payload.get("type") != "access":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
-        user_id: Optional[int] = payload.get("sub")
-        if user_id is None:
+        raw_user_id: Optional[str] = payload.get("sub")  # type: ignore[assignment]
+        if raw_user_id is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido") from None
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
     
@@ -41,11 +45,12 @@ async def get_current_active_user(
     return current_user
 
 
-async def require_role(required_role: str):
+def require_role(required_role: str):
     """Dependency factory para requerir un rol específico."""
     async def role_checker(current_user: Usuario = Depends(get_current_user)) -> Usuario:
-        role_names = [rol.nombre for rol in current_user.roles]
-        if required_role not in role_names:
+        normalized_required = required_role.strip().upper()
+        role_names = [rol.nombre.strip().upper() for rol in current_user.roles]
+        if normalized_required not in role_names and all(normalized_required not in role for role in role_names):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Se requiere el rol: {required_role}"

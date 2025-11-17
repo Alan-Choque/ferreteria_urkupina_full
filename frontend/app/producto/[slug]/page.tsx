@@ -1,134 +1,110 @@
-import { productsService } from "@/lib/services/products-service";
-import { notFound } from "next/navigation";
-import Link from "next/link";
+import ProductDetailView from "@/components/product-detail-view"
+import { productsService } from "@/lib/services/products-service"
+import { notFound } from "next/navigation"
 
 type PageProps = {
-  params: { slug: string };
-  searchParams?: Record<string, string | string[] | undefined>;
-};
+  params: Promise<{ slug: string }>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}
 
-export default async function ProductDetailPage({ params }: PageProps) {
-  const { slug } = params;
+export default async function ProductDetailPage({ params, searchParams }: PageProps) {
+  const { slug } = await params
+  const resolvedSearch = searchParams ? await searchParams : undefined
+  const fallbackId = resolvedSearch?.id
 
-  try {
-    // Llamadas al backend
-    const [product, variants] = await Promise.all([
-      productsService.getProductBySlug(slug),
-      productsService.listVariantsBySlug(slug).catch(() => []), // Fallback a array vacío si falla
-    ]);
+  let product = null
 
-    // Mapear campos del backend a lo que espera la UI
-    const productName = product.nombre || product.name || "Producto";
-    const productImage = product.image || product.imagenes?.[0]?.url || "/placeholder.png";
-    const productShort = product.short || product.descripcion || "";
-    const productDescription = product.descripcion || product.short || "";
-    // Precio: usar price del producto, o el de la primera variante, o null
-    const productPrice =
-      product.price ?? (product.variantes?.[0]?.precio ? Number(product.variantes[0].precio) : null);
+  // Validar que el slug no sea "undefined" o inválido
+  if (!slug || slug === "undefined" || slug === "null" || slug.trim() === "") {
+    // Si tenemos un ID de fallback, usarlo directamente
+    if (fallbackId) {
+      try {
+        const id = typeof fallbackId === "string" ? parseInt(fallbackId, 10) : Number(fallbackId)
+        if (!isNaN(id) && id > 0) {
+          product = await productsService.getProductById(id)
+        }
+      } catch {}
+    }
+    
+    if (!product) {
+      notFound()
+    }
+  } else {
+    // Priorizar slug (método principal) solo si es válido
+    
+    // Intentar primero con el slug tal cual viene
+    try {
+      product = await productsService.getProductBySlug(slug)
+    } catch (slugError: any) {
+      const status = slugError?.status
+      
+      // Intentar búsqueda aproximada por texto si 404
+      if (status === 404 && !product) {
+        try {
+          const query = slug.replace(/-/g, " ")
+          const list = await productsService.listProducts({ q: query, page: 1, page_size: 1 })
+          const candidate = list.items?.[0]
+          if (candidate?.id) {
+            product = await productsService.getProductById(candidate.id)
+          }
+        } catch {}
+      }
+      
+      // Si el slug es un número, intentar como ID
+      if (!isNaN(Number(slug))) {
+        try {
+          product = await productsService.getProductById(Number(slug))
+        } catch {}
+      }
+      
+      // Si aún no se encontró y tenemos un ID en los parámetros, intentar con ese ID
+      if (!product && fallbackId) {
+        try {
+          const id = typeof fallbackId === "string" ? parseInt(fallbackId, 10) : Number(fallbackId)
+          if (!isNaN(id) && id > 0) {
+            product = await productsService.getProductById(id)
+          }
+        } catch {}
+      }
+    }
+  }
 
-    return (
-      <main className="container mx-auto p-4 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Imagen */}
-          <div className="space-y-4">
-            <img
-              src={productImage}
-              alt={productName}
-              className="w-full h-auto max-w-md mx-auto object-cover rounded-lg"
-            />
-            {product.imagenes && product.imagenes.length > 1 && (
-              <div className="grid grid-cols-4 gap-2">
-                {product.imagenes.slice(1, 5).map((img) => (
-                  <img
-                    key={img.id}
-                    src={img.url}
-                    alt={img.descripcion || productName}
-                    className="w-full h-24 object-cover rounded cursor-pointer hover:opacity-75"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+  if (!product) {
+    notFound()
+  }
 
-          {/* Información */}
-          <div className="space-y-4">
-            <div>
-              <h1 className="text-3xl font-bold text-neutral-900">{productName}</h1>
-              {product.marca && (
-                <p className="text-sm text-neutral-600 mt-1">Marca: {product.marca.nombre}</p>
-              )}
-              {product.categoria && (
-                <p className="text-sm text-neutral-600">Categoría: {product.categoria.nombre}</p>
-              )}
-            </div>
+  const serializableProduct = JSON.parse(JSON.stringify(product))
+  const variants = serializableProduct.variantes ?? []
 
-            {productShort && <p className="text-gray-600 text-lg">{productShort}</p>}
-
-            {productPrice !== null && (
-              <div className="text-2xl font-bold text-green-600">
-                Bs. {productPrice.toLocaleString("es-BO")}
-              </div>
-            )}
-
-            {product.sku && (
-              <div className="text-sm text-neutral-600">
-                <span className="font-semibold">SKU:</span> {product.sku}
-              </div>
-            )}
-
-            {productDescription && (
-              <section className="prose max-w-none pt-4 border-t">
-                <h2 className="text-xl font-semibold mb-2">Descripción</h2>
-                <p className="text-neutral-700">{productDescription}</p>
-              </section>
-            )}
-          </div>
-        </div>
-
-        {/* Variantes */}
-        {variants && variants.length > 0 && (
-          <section className="mt-8">
-            <h2 className="text-xl font-semibold mb-4">Variantes Disponibles</h2>
-            <ul className="divide-y border rounded-lg">
-              {variants.map((variant) => (
-                <li key={variant.id} className="py-3 px-4 flex items-center justify-between hover:bg-neutral-50">
-                  <div>
-                    <div className="font-medium">{variant.nombre || "Variante sin nombre"}</div>
-                    {variant.unidad_medida_nombre && (
-                      <div className="text-sm text-gray-500">{variant.unidad_medida_nombre}</div>
-                    )}
-                  </div>
-                  {variant.precio !== null && variant.precio !== undefined && (
-                    <div className="font-semibold text-green-600">
-                      Bs. {Number(variant.precio).toLocaleString("es-BO")}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {(!variants || variants.length === 0) && (
-          <section className="mt-8">
-            <h2 className="text-xl font-semibold mb-4">Variantes Disponibles</h2>
-            <p className="text-gray-500">Sin variantes disponibles</p>
-          </section>
-        )}
-
-        {/* Botón de volver */}
-        <div className="mt-8">
-          <Link
+  return (
+    <div className="bg-gradient-to-br from-neutral-50 via-white to-neutral-100 py-3">
+      <div className="max-w-4xl mx-auto px-3.5 lg:px-4 space-y-3">
+        <nav className="text-sm text-neutral-500">
+          <a href="/" className="hover:text-neutral-800">
+            Inicio
+          </a>
+          <span className="mx-1.5">/</span>
+          <a href="/catalogo" className="hover:text-neutral-800">
+            Catálogo
+          </a>
+          {serializableProduct.categoria?.nombre && (
+            <>
+              <span className="mx-1.5">/</span>
+              <span>{serializableProduct.categoria.nombre}</span>
+            </>
+          )}
+        </nav>
+        <ProductDetailView product={serializableProduct} variants={variants} />
+        <div className="text-center">
+          <a
             href="/catalogo"
-            className="inline-block px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors"
+            className="inline-flex items-center.justify-center px-5 py-2.5 text-sm font-medium text-neutral-700 border border-neutral-300 rounded-2xl hover:border-neutral-500 hover:text-neutral-900 transition-colors"
           >
             ← Volver al catálogo
-          </Link>
+          </a>
         </div>
-      </main>
-    );
-  } catch (error) {
-    console.error("Error loading product:", error);
-    notFound();
-  }
+      </div>
+    </div>
+  )
 }
+

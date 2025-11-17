@@ -1,72 +1,73 @@
-import type { PurchaseOrder, ID } from "@/lib/contracts"
+import { api } from "@/lib/apiClient"
+import type { PurchaseOrder } from "@/lib/types/admin"
 
-let purchaseOrders: PurchaseOrder[] = [
-  {
-    id: "po-1",
-    supplierId: "supp-1",
-    status: "SENT",
-    expectedDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    total: 488000,
-    items: [
-      {
-        id: "poi-1",
-        variantId: "var-1",
-        qty: 2,
-        price: 244000,
-      },
-    ],
-    createdAt: new Date().toISOString(),
-  },
-]
+type PurchaseItemResponse = {
+  id: number
+  variante_producto_id: number
+  variante_nombre?: string | null
+  cantidad: number
+  precio_unitario?: number | null
+}
 
-const nextId = { po: 2, poi: 2 }
+type PurchaseOrderResponse = {
+  id: number
+  fecha: string
+  estado: string
+  proveedor?: { id: number; nombre: string } | null
+  usuario?: { id: number; nombre_usuario: string } | null
+  items: PurchaseItemResponse[]
+  total: number
+}
+
+type PurchaseOrderListResponse = {
+  items: PurchaseOrderResponse[]
+  total: number
+  page: number
+  page_size: number
+}
+
+function toAdminPurchase(order: PurchaseOrderResponse): PurchaseOrder {
+  return {
+    id: order.id,
+    poNumber: `PO-${order.id}`,
+    supplierId: order.proveedor?.nombre ?? "Proveedor",
+    status: order.estado.toLowerCase() as PurchaseOrder["status"],
+    items: order.items.map((item) => ({
+      id: item.id,
+      productId: item.variante_producto_id,
+      qty: item.cantidad,
+      price: item.precio_unitario ?? 0,
+    })),
+    expectedDate: order.fecha,
+    totalAmount: order.total,
+    createdAt: order.fecha,
+  }
+}
 
 export const purchasesService = {
-  async listPOs() {
-    await new Promise((r) => setTimeout(r, 300))
-    return purchaseOrders
+  async listPOs(): Promise<PurchaseOrder[]> {
+    const response = await api.get<PurchaseOrderListResponse>("/purchases")
+    return response.items.map(toAdminPurchase)
   },
 
-  async getPO(id: ID) {
-    await new Promise((r) => setTimeout(r, 200))
-    return purchaseOrders.find((po) => po.id === id)
+  async getPO(id: number): Promise<PurchaseOrder> {
+    const response = await api.get<PurchaseOrderResponse>(`/purchases/${id}`)
+    return toAdminPurchase(response)
   },
 
-  async createPO(data: Omit<PurchaseOrder, "id" | "createdAt">) {
-    await new Promise((r) => setTimeout(r, 400))
-    const newPO: PurchaseOrder = {
-      ...data,
-      id: `po-${nextId.po++}`,
-      createdAt: new Date().toISOString(),
-    }
-    purchaseOrders.push(newPO)
-    return newPO
+  async createPO(): Promise<PurchaseOrder> {
+    throw new Error("La creación de órdenes de compra no está disponible todavía")
   },
 
-  async updatePO(id: ID, data: Partial<PurchaseOrder>) {
-    await new Promise((r) => setTimeout(r, 400))
-    const po = purchaseOrders.find((p) => p.id === id)
-    if (!po) throw new Error("Orden de compra no encontrada")
-    Object.assign(po, data)
-    return po
+  async updatePO(): Promise<PurchaseOrder> {
+    throw new Error("La actualización de órdenes de compra no está disponible todavía")
   },
 
-  async deletePO(id: ID) {
-    await new Promise((r) => setTimeout(r, 300))
-    purchaseOrders = purchaseOrders.filter((p) => p.id !== id)
+  async deletePO(): Promise<void> {
+    throw new Error("La eliminación de órdenes de compra no está disponible todavía")
   },
 
-  async receivePO(id: ID, receivedQties: Record<ID, number>) {
-    await new Promise((r) => setTimeout(r, 400))
-    const po = purchaseOrders.find((p) => p.id === id)
-    if (!po) throw new Error("Orden de compra no encontrada")
-    po.items.forEach((item) => {
-      if (receivedQties[item.id]) {
-        item.qty = receivedQties[item.id]
-      }
-    })
-    const allReceived = po.items.every((i) => i.qty > 0)
-    po.status = allReceived ? "RECEIVED" : "PARTIAL"
-    return po
+  async receivePO(): Promise<PurchaseOrder> {
+    throw new Error("El recibo de órdenes no está implementado todavía")
   },
 }

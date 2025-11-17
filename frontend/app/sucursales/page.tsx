@@ -3,12 +3,12 @@
 import { useState } from "react"
 import Header from "@/components/header"
 import MegaMenu from "@/components/mega-menu"
+import FooterFerretek from "@/components/footer-ferretek"
 
 interface Store {
   id: string
   name: string
   address: string
-  city: string
   phone: string
   hours: string
   availability: boolean
@@ -16,39 +16,19 @@ interface Store {
 
 export default function StoresPage() {
   const [selectedStore, setSelectedStore] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
 
   const stores: Store[] = [
     {
-      id: "lp",
-      name: "Sucursal La Paz",
-      address: "Calle Principal 123",
-      city: "La Paz",
-      phone: "71234567",
+      id: "santa-cruz",
+      name: "Santa Cruz",
+      address: "Av. San Joaquín esquina Calle 'A', lado del Colegio Miguel Antelo, Guayaramerin",
+      phone: "+591 68464378",
       hours: "Lunes-Viernes: 8:00-18:00 | Sábados: 9:00-14:00",
       availability: true,
-    },
-    {
-      id: "cbba",
-      name: "Sucursal Cochabamba",
-      address: "Avenida Secundaria 456",
-      city: "Cochabamba",
-      phone: "71234568",
-      hours: "Lunes-Viernes: 8:00-18:00 | Sábados: 9:00-14:00",
-      availability: true,
-    },
-    {
-      id: "scz",
-      name: "Sucursal Santa Cruz",
-      address: "Boulevard Tercero 789",
-      city: "Santa Cruz",
-      phone: "71234569",
-      hours: "Lunes-Viernes: 8:00-18:00 | Sábados: 9:00-14:00",
-      availability: false,
     },
   ]
 
-  const handleSetAsMyStore = (storeId: string) => {
+  const handleStoreSelect = (storeId: string) => {
     localStorage.setItem("selectedStore", storeId)
     setSelectedStore(storeId)
   }
@@ -58,128 +38,102 @@ export default function StoresPage() {
       <Header />
       <MegaMenu />
       <main className="min-h-screen bg-white py-12">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-neutral-900 mb-4">Nuestras Sucursales</h1>
-            <p className="text-neutral-700 mb-6">
-              Selecciona tu tienda más cercana para ver disponibilidad de productos
-            </p>
+        <div className="max-w-7xl mx-auto px-4">
+          <h1 className="text-4xl font-bold text-neutral-900 mb-8">Nuestras Sucursales</h1>
 
-            {/* View Toggle */}
-            <div className="flex gap-2 mb-6">
-              <button
-                onClick={() => setViewMode("grid")}
-                className={`px-4 py-2 rounded-lg font-bold ${
-                  viewMode === "grid"
-                    ? "bg-red-600 text-white"
-                    : "border border-neutral-300 text-neutral-700 hover:bg-neutral-100"
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+            {stores.map((store) => (
+              <div
+                key={store.id}
+                className={`border rounded-lg p-6 cursor-pointer transition-all ${
+                  selectedStore === store.id
+                    ? "bg-orange-600 text-white border-orange-600"
+                    : "border-neutral-300 text-neutral-700 hover:bg-neutral-100"
                 }`}
+                onClick={() => handleStoreSelect(store.id)}
               >
-                Vista Cuadrícula
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={`px-4 py-2 rounded-lg font-bold ${
-                  viewMode === "list"
-                    ? "bg-red-600 text-white"
-                    : "border border-neutral-300 text-neutral-700 hover:bg-neutral-100"
-                }`}
-              >
-                Vista Lista
-              </button>
-            </div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold">{store.name}</h2>
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      selectedStore === store.id
+                        ? "bg-white"
+                        : store.availability
+                          ? "bg-green-500"
+                          : "bg-red-500"
+                    }`}
+                  />
+                </div>
+                <p className="text-sm mb-2 opacity-90">{store.address}</p>
+                <p className="text-sm mb-2 opacity-90">{store.phone}</p>
+                <p className="text-sm opacity-90">{store.hours}</p>
+                <div className="mt-4">
+                  <span
+                    className={`text-xs px-2 py-1 rounded ${
+                      selectedStore === store.id
+                        ? "bg-white text-orange-600"
+                        : store.availability
+                          ? "bg-green-100 text-green-800"
+                          : "bg-red-100 text-red-800"
+                    }`}
+                  >
+                    {store.availability ? "Disponible" : "No disponible"}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
 
-          {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {stores.map((store) => (
-                <div
-                  key={store.id}
-                  className="border border-neutral-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
-                >
-                  {/* Map Placeholder */}
-                  <div className="w-full h-40 bg-neutral-200 flex items-center justify-center text-neutral-600 text-sm">
-                    Mapa de {store.city}
-                  </div>
-
-                  <div className="p-4">
-                    <h3 className="font-bold text-lg text-neutral-900 mb-2">{store.name}</h3>
-                    <div className="space-y-2 text-sm text-neutral-700 mb-4">
-                      <p>
-                        <span className="text-neutral-900 font-bold">Dirección:</span> {store.address}
-                      </p>
-                      <p>
-                        <span className="text-neutral-900 font-bold">Ciudad:</span> {store.city}
-                      </p>
-                      <p>
-                        <span className="text-neutral-900 font-bold">Teléfono:</span> {store.phone}
-                      </p>
-                      <p>
-                        <span className="text-neutral-900 font-bold">Horario:</span> {store.hours}
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <button
-                        onClick={() => handleSetAsMyStore(store.id)}
-                        className="w-full py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 text-sm"
-                      >
-                        Usar esta tienda
-                      </button>
-                      <button className="w-full py-2 border border-neutral-300 text-neutral-700 font-bold rounded-lg hover:bg-neutral-100 text-sm">
-                        Ver Disponibilidad
-                      </button>
-                    </div>
+          {selectedStore ? (
+            <div className="bg-neutral-50 rounded-lg p-6">
+              <h2 className="text-2xl font-bold text-neutral-900 mb-4">
+                Información de {stores.find((s) => s.id === selectedStore)?.name}
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold text-neutral-900 mb-2">Dirección</h3>
+                  <p className="text-neutral-700">
+                    {stores.find((s) => s.id === selectedStore)?.address}
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-neutral-900 mb-2">Teléfono</h3>
+                  <p className="text-neutral-700">
+                    {stores.find((s) => s.id === selectedStore)?.phone}
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-neutral-900 mb-2">Horario</h3>
+                  <p className="text-neutral-700">
+                    {stores.find((s) => s.id === selectedStore)?.hours}
+                  </p>
+                </div>
+                <div className="mt-6">
+                  <div className="w-full h-64 bg-neutral-200 rounded-lg overflow-hidden">
+                    <iframe
+                      src="https://www.google.com/maps?q=Av.+San+Joaquín+esquina+Calle+A,+Colegio+Miguel+Antelo,+Guayaramerin,+Bolivia&output=embed"
+                      width="100%"
+                      height="100%"
+                      style={{ border: 0 }}
+                      allowFullScreen
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      className="w-full h-full"
+                      title="Ubicación Ferretería Urkupina - Av. San Joaquín esquina Calle A, Guayaramerin"
+                    />
                   </div>
                 </div>
-              ))}
+              </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              {stores.map((store) => (
-                <div
-                  key={store.id}
-                  className="border border-neutral-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="font-bold text-lg text-neutral-900 mb-2">{store.name}</h3>
-                      <div className="space-y-1 text-sm text-neutral-700">
-                        <p>
-                          <span className="text-neutral-900 font-bold">📍</span> {store.address}, {store.city}
-                        </p>
-                        <p>
-                          <span className="text-neutral-900 font-bold">📞</span> {store.phone}
-                        </p>
-                        <p>
-                          <span className="text-neutral-900 font-bold">🕒</span> {store.hours}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleSetAsMyStore(store.id)}
-                        className="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 text-sm"
-                      >
-                        Usar esta tienda
-                      </button>
-                      <button className="px-4 py-2 border border-neutral-300 text-neutral-700 font-bold rounded-lg hover:bg-neutral-100 text-sm">
-                        Ver Disponibilidad
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="text-center py-12">
+              <p className="text-neutral-500">Selecciona una sucursal para ver más información</p>
             </div>
           )}
         </div>
       </main>
 
-      <footer className="bg-neutral-900 text-white py-8 mt-16">
-        <div className="max-w-7xl mx-auto px-4 text-center text-neutral-400 text-sm">
-          <p>&copy; 2025 Ferretería Urkupina. Todos los derechos reservados.</p>
-        </div>
-      </footer>
+      <FooterFerretek />
     </>
   )
 }

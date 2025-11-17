@@ -25,7 +25,7 @@ export function CartItemRow({ item }: { item: CartItem }) {
       {/* Details */}
       <div className="flex-1 min-w-0">
         <Link
-          href={`/producto/${item.slug}`}
+          href={`/producto/${item.id}`}
           className="text-sm font-semibold text-neutral-900 hover:text-red-600 transition-colors line-clamp-2"
         >
           {item.name}
@@ -38,7 +38,7 @@ export function CartItemRow({ item }: { item: CartItem }) {
       <div className="flex flex-col items-end gap-2">
         <div className="flex items-center gap-1 border border-neutral-300 rounded-md bg-white">
           <button
-            onClick={() => updateQty(item.id, item.qty - 1)}
+            onClick={() => updateQty(item.variantId, item.qty - 1)}
             className="p-1 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1 rounded"
             aria-label={`Reducir cantidad de ${item.name}`}
           >
@@ -46,7 +46,7 @@ export function CartItemRow({ item }: { item: CartItem }) {
           </button>
           <span className="w-6 text-center text-sm font-medium">{item.qty}</span>
           <button
-            onClick={() => updateQty(item.id, item.qty + 1)}
+            onClick={() => updateQty(item.variantId, item.qty + 1)}
             className="p-1 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1 rounded"
             aria-label={`Aumentar cantidad de ${item.name}`}
           >
@@ -55,7 +55,7 @@ export function CartItemRow({ item }: { item: CartItem }) {
         </div>
 
         <button
-          onClick={() => remove(item.id)}
+          onClick={() => remove(item.variantId)}
           className="p-1 text-neutral-500 hover:text-red-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 rounded"
           aria-label={`Eliminar ${item.name} del carrito`}
         >

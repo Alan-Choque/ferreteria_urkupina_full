@@ -1,60 +1,69 @@
-import type { Reservation, ID, ReservationStatus } from "@/lib/contracts"
+import { api } from "@/lib/apiClient"
+import type { Reservation } from "@/lib/types/admin"
 
-let reservations: Reservation[] = [
-  {
-    id: "res-1",
-    customerId: "cust-1",
-    productId: "prod-1",
-    variantId: "var-1",
-    qty: 1,
-    storeId: "branch-1",
-    deposit: 100000,
-    status: "PENDIENTE",
-    createdAt: new Date().toISOString(),
-  },
-]
+type ReservationItemResponse = {
+  id: number
+  variante_producto_id: number
+  variante_nombre?: string | null
+  cantidad: number
+}
 
-let nextId = 2
+type ReservationResponse = {
+  id: number
+  fecha_reserva?: string | null
+  estado: string
+  cliente?: { id: number; nombre: string } | null
+  usuario?: { id: number; nombre_usuario: string } | null
+  items: ReservationItemResponse[]
+}
+
+type ReservationListResponse = {
+  items: ReservationResponse[]
+  total: number
+  page: number
+  page_size: number
+}
+
+function toAdminReservation(reservation: ReservationResponse): Reservation {
+  const item = reservation.items[0]
+  return {
+    id: reservation.id,
+    reservationNumber: `RS-${reservation.id}`,
+    customerId: reservation.cliente?.nombre ?? "Cliente",
+    productId: item?.variante_producto_id ?? 0,
+    variantId: item?.variante_producto_id ?? 0,
+    qty: item?.cantidad ?? 0,
+    store: reservation.usuario?.nombre_usuario ?? "Matriz",
+    depositAmount: 0,
+    status: reservation.estado.toLowerCase() as Reservation["status"],
+    createdAt: reservation.fecha_reserva ?? new Date().toISOString(),
+  }
+}
 
 export const reservationsService = {
-  async listReservations() {
-    await new Promise((r) => setTimeout(r, 300))
-    return reservations
+  async listReservations(): Promise<Reservation[]> {
+    const response = await api.get<ReservationListResponse>("/reservations")
+    return response.items.map(toAdminReservation)
   },
 
-  async getReservation(id: ID) {
-    await new Promise((r) => setTimeout(r, 200))
-    return reservations.find((r) => r.id === id)
+  async getReservation(id: number): Promise<Reservation> {
+    const response = await api.get<ReservationResponse>(`/reservations/${id}`)
+    return toAdminReservation(response)
   },
 
-  async createReservation(data: Omit<Reservation, "id">) {
-    await new Promise((r) => setTimeout(r, 400))
-    const newReservation: Reservation = {
-      ...data,
-      id: `res-${nextId++}`,
-    }
-    reservations.push(newReservation)
-    return newReservation
+  async createReservation(): Promise<Reservation> {
+    throw new Error("La creación de reservas no está disponible todavía")
   },
 
-  async updateReservation(id: ID, data: Partial<Reservation>) {
-    await new Promise((r) => setTimeout(r, 400))
-    const reservation = reservations.find((r) => r.id === id)
-    if (!reservation) throw new Error("Reserva no encontrada")
-    Object.assign(reservation, data)
-    return reservation
+  async updateReservation(): Promise<Reservation> {
+    throw new Error("La actualización de reservas no está disponible todavía")
   },
 
-  async updateReservationStatus(id: ID, status: ReservationStatus) {
-    await new Promise((r) => setTimeout(r, 300))
-    const reservation = reservations.find((r) => r.id === id)
-    if (!reservation) throw new Error("Reserva no encontrada")
-    reservation.status = status
-    return reservation
+  async updateReservationStatus(): Promise<Reservation> {
+    throw new Error("El cambio de estado de reservas no está disponible todavía")
   },
 
-  async deleteReservation(id: ID) {
-    await new Promise((r) => setTimeout(r, 300))
-    reservations = reservations.filter((r) => r.id !== id)
+  async deleteReservation(): Promise<void> {
+    throw new Error("La eliminación de reservas no está disponible todavía")
   },
 }

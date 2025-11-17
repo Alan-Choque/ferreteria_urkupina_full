@@ -1,7 +1,15 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
+
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Integer, Numeric, DateTime, ForeignKey
 from app.db.base import Base
+
+
+if TYPE_CHECKING:  # pragma: no cover
+    from app.models.atributo import ValorAtributoVariante
+    from app.models.producto_almacen import ProductoAlmacen
+    from app.models.producto import Producto
 
 
 class VarianteProducto(Base):
@@ -19,6 +27,11 @@ class VarianteProducto(Base):
     producto: Mapped["Producto"] = relationship("Producto", back_populates="variantes")
     unidad_medida: Mapped["UnidadMedida"] = relationship("UnidadMedida", back_populates="variantes")
     stock_almacenes: Mapped[list["ProductoAlmacen"]] = relationship("ProductoAlmacen", back_populates="variante")
+    valores_atributos: Mapped[list["ValorAtributoVariante"]] = relationship(
+        "ValorAtributoVariante",
+        back_populates="variante",
+        cascade="all, delete-orphan",
+    )
 
 
 class UnidadMedida(Base):

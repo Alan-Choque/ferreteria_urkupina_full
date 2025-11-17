@@ -68,12 +68,12 @@ export interface InventoryMovement {
 export interface PurchaseOrder {
   id: number
   poNumber: string
-  supplierId: number
+  supplierId: string | number
   status: "draft" | "sent" | "received" | "partial" | "canceled"
   items: POItem[]
-  expectedDate: Date
-  totalAmount: number
-  createdAt: Date
+  expectedDate?: string | Date
+  totalAmount?: number
+  createdAt: string | Date
 }
 
 export interface POItem {
@@ -170,14 +170,14 @@ export interface Campaign {
 export interface Reservation {
   id: number
   reservationNumber: string
-  customerId: number
-  productId: number
-  variantId: number
+  customerId: number | string
+  productId: number | string
+  variantId: number | string
   qty: number
   store: string
   depositAmount: number
   status: "pending" | "confirmed" | "canceled"
-  createdAt: Date
+  createdAt: Date | string
 }
 
 export interface Branch {

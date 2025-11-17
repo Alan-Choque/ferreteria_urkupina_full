@@ -16,7 +16,7 @@ if getattr(config, "config_file_name", None):
 
 # Toma la URL desde settings si no está en alembic.ini
 if not config.get_main_option("sqlalchemy.url"):
-    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    config.set_main_option("sqlalchemy.url", settings.database_url)
 
 target_metadata = Base.metadata
 
@@ -29,7 +29,7 @@ def include_object(object, name, type_, reflected, compare_to):
     return True
 
 def run_migrations_offline():
-    url = settings.DATABASE_URL
+    url = settings.database_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -46,7 +46,7 @@ def run_migrations_offline():
 
 def run_migrations_online():
     connectable = engine_from_config(
-        {"sqlalchemy.url": settings.DATABASE_URL},
+        {"sqlalchemy.url": settings.database_url},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

@@ -1,3 +1,5 @@
+import { api } from "@/lib/apiClient"
+
 export interface MediaFile {
   id: string
   filename: string
@@ -14,9 +16,8 @@ export interface MediaFile {
 }
 
 export interface FileListParams {
-  query?: string
-  type?: string
-  tag?: string
+  productoId?: number
+  search?: string
   page?: number
   limit?: number
 }
@@ -28,147 +29,95 @@ export interface FileListResult {
   limit: number
 }
 
-class FilesService {
-  private files: Map<string, MediaFile> = new Map()
-  private mockData: MediaFile[] = [
-    {
-      id: "1",
-      filename: "product-hammer.jpg",
-      mime: "image/jpeg",
-      size: 245000,
-      dimensions: { width: 1200, height: 800 },
-      type: "image",
-      createdAt: new Date("2025-01-15"),
-      tags: ["products", "tools"],
-      usedIn: [{ type: "product", id: "101", title: "Martillo de Construcción" }],
-      publicUrl: "/claw-hammer.png",
-      previewUrl: "/claw-hammer.png",
-      alt: "Martillo de construcción profesional",
-    },
-    {
-      id: "2",
-      filename: "invoice-2025-01.pdf",
-      mime: "application/pdf",
-      size: 512000,
-      type: "pdf",
-      createdAt: new Date("2025-01-10"),
-      tags: ["purchases", "invoices"],
-      usedIn: [{ type: "purchase", id: "PO-001", title: "Compra Enero 2025" }],
-      publicUrl: "/pdf-icon.svg",
-      previewUrl: "/pdf-placeholder.svg",
-    },
-  ]
+type FileAssetResponse = {
+  id: number
+  producto_id: number
+  url: string
+  descripcion?: string | null
+  fecha_creacion: string
+}
 
-  constructor() {
-    this.mockData.forEach((file) => this.files.set(file.id, file))
-  }
+type FileAssetListResponse = {
+  items: FileAssetResponse[]
+  total: number
+  page: number
+  page_size: number
+}
 
-  async list(params: FileListParams): Promise<FileListResult> {
-    await this.simulateLatency(300)
-
-    let filtered = Array.from(this.files.values())
-
-    if (params.query) {
-      filtered = filtered.filter((f) => f.filename.toLowerCase().includes(params.query!.toLowerCase()))
-    }
-
-    if (params.type) {
-      filtered = filtered.filter((f) => f.type === params.type)
-    }
-
-    if (params.tag) {
-      filtered = filtered.filter((f) => f.tags.includes(params.tag!))
-    }
-
-    const page = params.page || 1
-    const limit = params.limit || 20
-    const start = (page - 1) * limit
-
-    return {
-      files: filtered.slice(start, start + limit),
-      total: filtered.length,
-      page,
-      limit,
-    }
-  }
-
-  async upload(files: File[]): Promise<MediaFile[]> {
-    await this.simulateLatency(500)
-    const uploaded: MediaFile[] = []
-
-    for (const file of files) {
-      const mediaFile: MediaFile = {
-        id: Math.random().toString(36).substr(2, 9),
-        filename: file.name,
-        mime: file.type,
-        size: file.size,
-        type: this.getFileType(file.type),
-        createdAt: new Date(),
-        tags: [],
-        usedIn: [],
-        publicUrl: URL.createObjectURL(file),
-        previewUrl: URL.createObjectURL(file),
-      }
-
-      if (file.type.startsWith("image/")) {
-        mediaFile.dimensions = await this.getImageDimensions(file)
-      }
-
-      this.files.set(mediaFile.id, mediaFile)
-      uploaded.push(mediaFile)
-    }
-
-    return uploaded
-  }
-
-  async remove(ids: string[]): Promise<void> {
-    await this.simulateLatency(200)
-    ids.forEach((id) => this.files.delete(id))
-  }
-
-  async updateMeta(id: string, meta: { alt?: string; tags?: string[] }): Promise<MediaFile> {
-    await this.simulateLatency(200)
-    const file = this.files.get(id)
-    if (!file) throw new Error("File not found")
-
-    if (meta.alt) file.alt = meta.alt
-    if (meta.tags) file.tags = meta.tags
-
-    return file
-  }
-
-  async get(id: string): Promise<MediaFile> {
-    await this.simulateLatency(100)
-    const file = this.files.get(id)
-    if (!file) throw new Error("File not found")
-    return file
-  }
-
-  private getFileType(mime: string): "image" | "pdf" | "doc" | "video" | "other" {
-    if (mime.startsWith("image/")) return "image"
-    if (mime === "application/pdf") return "pdf"
-    if (mime.includes("word") || mime.includes("document")) return "doc"
-    if (mime.startsWith("video/")) return "video"
-    return "other"
-  }
-
-  private async getImageDimensions(file: File): Promise<{ width: number; height: number }> {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const img = new Image()
-        img.onload = () => {
-          resolve({ width: img.width, height: img.height })
-        }
-        img.src = e.target?.result as string
-      }
-      reader.readAsDataURL(file)
-    })
-  }
-
-  private simulateLatency(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms))
+function guessMimeFromUrl(url: string): string {
+  const extension = url.split(".").pop()?.toLowerCase()
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg"
+    case "png":
+      return "image/png"
+    case "gif":
+      return "image/gif"
+    default:
+      return "application/octet-stream"
   }
 }
 
-export const filesService = new FilesService()
+function toMediaFile(asset: FileAssetResponse): MediaFile {
+  const mime = guessMimeFromUrl(asset.url)
+  const type = mime.startsWith("image/") ? "image" : "other"
+  const filename = asset.url.split("/").pop() || `asset-${asset.id}`
+
+  return {
+    id: asset.id.toString(),
+    filename,
+    mime,
+    size: 0,
+    type,
+    createdAt: new Date(asset.fecha_creacion),
+    tags: [],
+    usedIn: [],
+    publicUrl: asset.url,
+    previewUrl: asset.url,
+    alt: asset.descripcion ?? undefined,
+  }
+}
+
+export const filesService = {
+  async list(params: FileListParams = {}): Promise<FileListResult> {
+    const searchParams = new URLSearchParams()
+    if (params.productoId) searchParams.set("producto_id", String(params.productoId))
+    if (params.search) searchParams.set("search", params.search)
+    if (params.page) searchParams.set("page", String(params.page))
+    if (params.limit) searchParams.set("page_size", String(params.limit))
+
+    const query = searchParams.toString()
+    const response = await api.get<FileAssetListResponse>(`/files${query ? `?${query}` : ""}`, {
+      requireAuth: false,
+    })
+
+    return {
+      files: response.items.map(toMediaFile),
+      total: response.total,
+      page: response.page,
+      limit: response.page_size,
+    }
+  },
+
+  async get(id: string): Promise<MediaFile> {
+    const response = await api.get<FileAssetResponse>(`/files/${id}`, { requireAuth: false })
+    return toMediaFile(response)
+  },
+
+  async upload(_files: File[]): Promise<MediaFile[]> {
+    throw new Error("La carga de archivos aún no está disponible desde el frontend")
+  },
+
+  async remove(_ids: string[]): Promise<void> {
+    throw new Error("El borrado de archivos no está implementado todavía")
+  },
+
+  async updateMeta(id: string, meta: { alt?: string; tags?: string[] }): Promise<MediaFile> {
+    // No existe endpoint específico, por lo que devolvemos el archivo actual
+    const file = await this.get(id)
+    if (meta.alt) file.alt = meta.alt
+    if (meta.tags) file.tags = meta.tags
+    return file
+  },
+}

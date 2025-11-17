@@ -36,6 +36,7 @@ def test_list_products():
         assert "id" in item
         assert "nombre" in item
         assert "slug" in item
+        assert "status" in item
         # image, short, price pueden ser None
         assert "image" in item or item.get("image") is None
         assert "short" in item or item.get("short") is None

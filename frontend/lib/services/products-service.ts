@@ -7,14 +7,14 @@ import { api } from "@/lib/apiClient";
 export interface ProductListItem {
   id: number;
   sku?: string | null;
-  nombre: string; // Backend devuelve 'nombre', no 'name'
+  nombre: string;
   slug: string;
   image?: string | null;
   short?: string | null;
   price?: number | null;
   status: string;
   descripcion?: string | null;
-  marca?: { id: number; nombre: string } | null;
+  marca?: { id: number; nombre: string; descripcion?: string | null } | null;
   categoria?: { id: number; nombre: string } | null;
   variantes?: Array<{
     id: number;
@@ -27,13 +27,11 @@ export interface ProductListItem {
     url: string;
     descripcion?: string | null;
   }>;
-  // Helper: name para compatibilidad con UI
   name?: string;
 }
 
 export interface ProductDetail extends ProductListItem {
   descripcion?: string | null;
-  // Campos adicionales del detalle
 }
 
 export interface ProductListResponse {
@@ -43,22 +41,52 @@ export interface ProductListResponse {
   total: number;
 }
 
-export interface ProductVariant {
-  id: number;
+export interface ProductVariantInput {
+  id?: number;
   nombre?: string | null;
+  unidad_medida_id: number;
   precio?: number | null;
-  unidad_medida_nombre?: string | null;
+  delete?: boolean;
 }
 
-export interface StockResponse {
-  variante_id: number;
-  cantidad_disponible: number;
-  almacen_id: number;
-  almacen_nombre: string;
+export interface ProductImageInput {
+  id?: number;
+  url: string;
+  descripcion?: string | null;
+  delete?: boolean;
+}
+
+export interface ProductCreatePayload {
+  nombre: string;
+  descripcion?: string | null;
+  categoria_id?: number | null;
+  marca_id?: number | null;
+  status?: "ACTIVE" | "INACTIVE";
+  variantes: ProductVariantInput[];
+  imagenes?: ProductImageInput[];
+}
+
+export interface ProductUpdatePayload {
+  nombre?: string;
+  descripcion?: string | null;
+  categoria_id?: number | null;
+  marca_id?: number | null;
+  status?: "ACTIVE" | "INACTIVE";
+  variantes?: ProductVariantInput[];
+  imagenes?: ProductImageInput[];
+}
+
+export interface ProductStatusPayload {
+  status: "ACTIVE" | "INACTIVE";
+}
+
+export interface ProductMetaResponse {
+  marcas: Array<{ id: number; nombre: string; descripcion?: string | null }>;
+  categorias: Array<{ id: number; nombre: string }>;
+  unidades: Array<{ id: number; nombre: string; simbolo?: string | null }>;
 }
 
 export const productsService = {
-  // Listado público (usa /api/v1/products)
   async listProducts(params?: {
     q?: string;
     brand_id?: number;
@@ -80,46 +108,76 @@ export const productsService = {
     return api.get<ProductListResponse>(path);
   },
 
-  // Detalle por slug (usa /api/v1/products/{slug})
   async getProductBySlug(slug: string): Promise<ProductDetail> {
     return api.get<ProductDetail>(`/products/${encodeURIComponent(slug)}`);
   },
 
-  // Detalle por ID (temporal, para migración)
   async getProductById(id: string | number): Promise<ProductDetail> {
-    return api.get<ProductDetail>(`/products/by-id/${id}`);
+    const detail = await api.get<ProductDetail>(`/products/by-id/${id}`);
+    return { ...detail, name: detail.nombre };
   },
 
-  // Variantes por slug
   async listVariantsBySlug(slug: string): Promise<ProductVariant[]> {
     return api.get<ProductVariant[]>(`/products/${encodeURIComponent(slug)}/variants`);
   },
 
-  // Stock por variante
   async getStockByVariant(variantId: number | string): Promise<StockResponse[]> {
     return api.get<StockResponse[]>(`/inventory/stock/${variantId}`);
   },
 
-  // ====== Métodos Admin (aún no implementados) ======
-  async createProduct() {
-    throw new Error("Admin API no implementada aún");
+  // Admin endpoints
+  async adminListProducts(params?: {
+    q?: string;
+    brand_id?: number;
+    category_id?: number;
+    status?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<ProductListResponse> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const queryString = queryParams.toString();
+    const path = `/admin/products${queryString ? `?${queryString}` : ""}`;
+    return api.get<ProductListResponse>(path);
   },
-  async updateProduct() {
-    throw new Error("Admin API no implementada aún");
+
+  async fetchMeta(): Promise<ProductMetaResponse> {
+    return api.get<ProductMetaResponse>(`/admin/products/meta`);
   },
-  async deleteProduct() {
-    throw new Error("Admin API no implementada aún");
+
+  async createProduct(payload: ProductCreatePayload): Promise<ProductDetail> {
+    return api.post<ProductDetail>(`/admin/products`, payload);
   },
-  async createVariant() {
-    throw new Error("Admin API no implementada aún");
+
+  async adminGetProduct(productId: number): Promise<ProductDetail> {
+    return api.get<ProductDetail>(`/admin/products/${productId}`);
   },
-  async deleteVariant() {
-    throw new Error("Admin API no implementada aún");
+
+  async updateProduct(productId: number, payload: ProductUpdatePayload): Promise<ProductDetail> {
+    return api.put<ProductDetail>(`/admin/products/${productId}`, payload);
   },
-  async listBrands() {
-    return [];
-  },
-  async listCategories() {
-    return [];
+
+  async updateProductStatus(productId: number, payload: ProductStatusPayload): Promise<ProductDetail> {
+    return api.patch<ProductDetail>(`/admin/products/${productId}/status`, payload);
   },
 };
+
+export interface ProductVariant {
+  id: number;
+  nombre?: string | null;
+  precio?: number | null;
+  unidad_medida_nombre?: string | null;
+}
+
+export interface StockResponse {
+  variante_id: number;
+  cantidad_disponible: number;
+  almacen_id: number;
+  almacen_nombre: string;
+}

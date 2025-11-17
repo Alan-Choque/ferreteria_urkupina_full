@@ -373,12 +373,12 @@ cat .env | Select-String "CORS_ORIGINS"
 
 **Debe ser**:
 ```
-CORS_ORIGINS_RAW=["http://localhost:3000"]
+CORS_ORIGINS=["http://localhost:3000"]
 ```
 
 **O coma-separado**:
 ```
-CORS_ORIGINS_RAW=http://localhost:3000,http://localhost:5173
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 ```
 
 #### Paso 2: Reiniciar contenedor
@@ -496,13 +496,15 @@ export const productsService = {
 };
 ```
 
-**Servicios que DEBEN usar API real**:
-- ✅ `auth-service.ts` - Ya usa API real
-- ✅ `products-service.ts` - Ya usa API real
-- ⚠️ `customers-service.ts` - Aún tiene mocks (pendiente)
-- ⚠️ `suppliers-service.ts` - Aún tiene mocks (pendiente)
-- ⚠️ `sales-service.ts` - Aún tiene mocks (pendiente)
-- ⚠️ Otros servicios admin - Aún tienen mocks (pendiente)
+**Servicios que usan API real**:
+- ✅ `auth-service.ts` – Tokens y sesiones reales
+- ✅ `products-service.ts` – Catálogo, variantes e inventario
+- ✅ `customers-service.ts` – Clientes reales desde SQL Server
+- ✅ `suppliers-service.ts` – Proveedores reales
+- ✅ `sales-service.ts` – Órdenes de venta en modo lectura
+- ✅ `purchases-service.ts` – Órdenes de compra en modo lectura
+- ✅ `reservations-service.ts` – Reservas en modo lectura
+- ✅ `files-service.ts` – Activos/imágenes de productos en modo lectura
 
 ---
 
@@ -630,7 +632,37 @@ npm run dev
 
 ---
 
-### 10. "ODBC Driver 18 for SQL Server not found"
+### 10. `400 - Stock insuficiente` al registrar ingresos o transferencias
+
+**Síntomas**:
+- Respuesta de la API: `{"detail":"Stock insuficiente para la variante ..."}`
+- Operación en el panel de inventario se revierte automáticamente.
+
+**Posibles causas**:
+1. Intentas transferir más unidades de las disponibles en el almacén origen.
+2. El `almacen_id` o `variante_id` enviados no existen en la base real.
+3. `cantidad` o `cantidad_nueva` son `0`, negativas o no numéricas.
+
+**Soluciones**:
+
+1. Verificar el stock actual antes de operar:
+   ```powershell
+   curl http://localhost:8000/api/v1/inventory/stock `
+     -H "Authorization: Bearer $Env:ADMIN_TOKEN"
+   ```
+2. Ajustar las cantidades para que no excedan el inventario disponible.
+3. Usar el buscador de variantes del panel (botón **Buscar**) para evitar IDs no válidos.
+4. En pruebas, revertir rápidamente con el endpoint de ajustes:
+   ```powershell
+   curl -X POST http://localhost:8000/api/v1/inventory/adjustments `
+     -H "Content-Type: application/json" `
+     -H "Authorization: Bearer $Env:ADMIN_TOKEN" `
+     -d '{"descripcion":"Reversión de prueba","items":[{"variante_id":1,"almacen_id":1,"cantidad_nueva":100}]}'
+   ```
+
+---
+
+### 11. "ODBC Driver 18 for SQL Server not found"
 
 **Síntomas**:
 - Error: `[Microsoft][ODBC Driver Manager] Driver's SQLAllocHandle on SQL_HANDLE_ENV failed`
@@ -697,7 +729,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\selftest.ps1
 ```powershell
 # Backend
 docker compose exec api sh -c 'echo $DATABASE_URL'
-docker compose exec api sh -c 'echo $CORS_ORIGINS_RAW'
+docker compose exec api sh -c 'echo $CORS_ORIGINS'
 
 # Frontend
 cd frontend

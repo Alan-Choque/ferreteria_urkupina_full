@@ -6,7 +6,7 @@ from app.core.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.auth import Token, LoginRequest, RefreshRequest, UserResponse, RegisterRequest, RegisterResponse
-from app.services.user_service import register_user
+from app.services.user_service import UserService
 
 router = APIRouter()
 
@@ -31,8 +31,9 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail="Usuario inactivo"
         )
     
-    access_token = create_access_token(data={"sub": user.id})
-    refresh_token = create_refresh_token(data={"sub": user.id})
+    subject = str(user.id)
+    access_token = create_access_token(data={"sub": subject})
+    refresh_token = create_refresh_token(data={"sub": subject})
     
     return {
         "access_token": access_token,
@@ -58,8 +59,9 @@ def refresh_token(request: RefreshRequest):
                 detail="Token de refresco inválido"
             )
         
-        access_token = create_access_token(data={"sub": user_id})
-        refresh_token = create_refresh_token(data={"sub": user_id})
+        subject = str(user_id)
+        access_token = create_access_token(data={"sub": subject})
+        refresh_token = create_refresh_token(data={"sub": subject})
         
         return {
             "access_token": access_token,
@@ -105,12 +107,12 @@ def register(
         # Generar uno automático para evitar duplicados accidentales
         idempotency_key = str(uuid.uuid4())
     
-    user_response, token_response = register_user(
-        db=db,
-        request_data=request,
+    user_service = UserService(db=db)
+    user_response, token_response = user_service.register_user(
+        request,
         idempotency_key=idempotency_key,
         request_path=request_obj.url.path,
-        request_method="POST"
+        request_method="POST",
     )
     
     return RegisterResponse(user=user_response, token=token_response)

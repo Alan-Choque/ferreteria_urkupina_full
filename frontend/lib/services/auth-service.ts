@@ -10,6 +10,8 @@ export interface RegisterRequest {
   username: string;
   email: string;
   password: string;
+  nitCi?: string;
+  telefono?: string;
 }
 
 export interface TokenResponse {
@@ -36,10 +38,22 @@ export interface AdminUser {
   id: number;
   name: string;
   email: string;
-  role: string;
+  role: UserRole;
   branch?: string;
   active: boolean;
   createdAt?: Date;
+  roles?: string[];
+}
+
+function mapBackendRoles(roles: string[]): UserRole {
+  const primary = (roles[0] ?? "").toLowerCase();
+  if (primary.includes("admin")) {
+    return "admin";
+  }
+  if (primary.includes("manager") || primary.includes("gerente")) {
+    return "manager";
+  }
+  return "staff";
 }
 
 function userResponseToAdminUser(user: UserResponse): AdminUser {
@@ -47,12 +61,15 @@ function userResponseToAdminUser(user: UserResponse): AdminUser {
     id: user.id,
     name: user.nombre_usuario,
     email: user.correo,
-    role: user.roles[0] || "user",
+    role: mapBackendRoles(user.roles),
+    roles: user.roles,
     branch: "Matriz", // Default, can be extended later
     active: user.activo,
     createdAt: new Date(),
   };
 }
+
+export const mapUserRoles = mapBackendRoles;
 
 export type UserRole = "admin" | "manager" | "user" | "staff";
 
@@ -89,16 +106,24 @@ export const authService = {
    * Stores tokens in localStorage and returns user info
    */
   async register(data: RegisterRequest): Promise<RegisterResponse> {
+    // Mapear nitCi y telefono a nit_ci y telefono para el backend
+    const payload: any = {
+      username: data.username,
+      email: data.email,
+      password: data.password,
+    }
+    if (data.nitCi) {
+      payload.nit_ci = data.nitCi
+    }
+    if (data.telefono) {
+      payload.telefono = data.telefono
+    }
     try {
       const response = await api.post<RegisterResponse>(
         "/auth/register",
-        data,
+        payload,
         { requireAuth: false, idempotencyKey: true } // Auto-generate Idempotency-Key
       );
-
-      // Store tokens
-      setAccessToken(response.token.access_token);
-      setRefreshToken(response.token.refresh_token);
 
       return response;
     } catch (error: any) {

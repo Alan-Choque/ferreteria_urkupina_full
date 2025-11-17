@@ -1,87 +1,84 @@
-import type { SalesOrder, Payment, ID, OrderStatus } from "@/lib/contracts"
+import { api } from "@/lib/apiClient"
+import type { SalesOrder } from "@/lib/contracts"
 
-const salesOrders: SalesOrder[] = [
-  {
-    id: "ord-1",
-    customerId: "cust-1",
-    status: "PENDIENTE",
-    items: [
-      {
-        id: "oi-1",
-        variantId: "var-1",
-        sku: "BOSCH-GSB-20-2RE-V1",
-        name: "Taladro de impacto Bosch",
-        price: 244000,
-        qty: 2,
-        image: "/claw-hammer.png",
-      },
-    ],
+type SaleItemResponse = {
+  id: number
+  variante_producto_id: number
+  variante_nombre?: string | null
+  cantidad: number
+  precio_unitario?: number | null
+}
+
+type SaleOrderResponse = {
+  id: number
+  fecha: string
+  estado: string
+  cliente?: { id: number; nombre: string } | null
+  usuario?: { id: number; nombre_usuario: string } | null
+  items: SaleItemResponse[]
+  total: number
+}
+
+type SaleOrderListResponse = {
+  items: SaleOrderResponse[]
+  total: number
+  page: number
+  page_size: number
+}
+
+function toSalesOrder(order: SaleOrderResponse): SalesOrder {
+  return {
+    id: order.id.toString(),
+    customerId: order.cliente?.nombre,
+    status: order.estado as SalesOrder["status"],
+    items: order.items.map((item) => ({
+      id: item.id.toString(),
+      variantId: item.variante_producto_id.toString(),
+      sku: item.variante_producto_id.toString(),
+      name: item.variante_nombre ?? "Variante",
+      price: item.precio_unitario ?? 0,
+      qty: item.cantidad,
+    })),
     totals: {
-      sub: 488000,
+      sub: order.total,
       discount: 0,
-      shipping: 50000,
-      total: 538000,
+      shipping: 0,
+      total: order.total,
       currency: "BOB",
     },
-    shippingMethod: "DOMICILIO",
-    shippingAddressId: "addr-1",
-    createdAt: new Date().toISOString(),
-  },
-]
-
-const payments: Payment[] = []
-const nextId = { order: 2, item: 2, payment: 1 }
+    shippingMethod: "RETIRO_TIENDA",
+    createdAt: order.fecha,
+  }
+}
 
 export const salesService = {
-  async listOrders() {
-    await new Promise((r) => setTimeout(r, 300))
-    return salesOrders
+  async listOrders(): Promise<SalesOrder[]> {
+    const response = await api.get<SaleOrderListResponse>("/sales")
+    return response.items.map(toSalesOrder)
   },
 
-  async getOrder(id: ID) {
-    await new Promise((r) => setTimeout(r, 200))
-    return salesOrders.find((o) => o.id === id)
+  async getOrder(id: string): Promise<SalesOrder> {
+    const response = await api.get<SaleOrderResponse>(`/sales/${id}`)
+    return toSalesOrder(response)
   },
 
-  async createOrder(data: Omit<SalesOrder, "id" | "createdAt">) {
-    await new Promise((r) => setTimeout(r, 400))
-    const newOrder: SalesOrder = {
-      ...data,
-      id: `ord-${nextId.order++}`,
-      createdAt: new Date().toISOString(),
-    }
-    salesOrders.push(newOrder)
-    return newOrder
+  async createOrder(): Promise<SalesOrder> {
+    throw new Error("La creación de órdenes de venta no está habilitada todavía")
   },
 
-  async updateOrder(id: ID, data: Partial<SalesOrder>) {
-    await new Promise((r) => setTimeout(r, 400))
-    const order = salesOrders.find((o) => o.id === id)
-    if (!order) throw new Error("Pedido no encontrado")
-    Object.assign(order, data)
-    return order
+  async updateOrder(): Promise<SalesOrder> {
+    throw new Error("La actualización de órdenes de venta no está habilitada todavía")
   },
 
-  async updateOrderStatus(id: ID, status: OrderStatus) {
-    await new Promise((r) => setTimeout(r, 300))
-    const order = salesOrders.find((o) => o.id === id)
-    if (!order) throw new Error("Pedido no encontrado")
-    order.status = status
-    return order
+  async updateOrderStatus(): Promise<SalesOrder> {
+    throw new Error("El cambio de estado de órdenes no está disponible todavía")
   },
 
-  async addPayment(salesOrderId: ID, data: Omit<Payment, "id">) {
-    await new Promise((r) => setTimeout(r, 400))
-    const payment: Payment = {
-      ...data,
-      id: `pay-${nextId.payment++}`,
-    }
-    payments.push(payment)
-    return payment
+  async addPayment(): Promise<never> {
+    throw new Error("El registro de pagos no está habilitado todavía")
   },
 
-  async listPayments(salesOrderId: ID) {
-    await new Promise((r) => setTimeout(r, 200))
-    return payments.filter((p) => p.salesOrderId === salesOrderId)
+  async listPayments(): Promise<never[]> {
+    return []
   },
 }

@@ -30,7 +30,7 @@ export default function TrustBar() {
             const Icon = feature.icon
             return (
               <div key={feature.id} className="flex items-center gap-4">
-                <div className="flex-shrink-0 w-14 h-14 bg-red-600 rounded-full flex items-center justify-center">
+                <div className="flex-shrink-0 w-14 h-14 bg-orange-600 rounded-full flex items-center justify-center">
                   <Icon className="w-7 h-7 text-white" aria-hidden="true" />
                 </div>
                 <div>
