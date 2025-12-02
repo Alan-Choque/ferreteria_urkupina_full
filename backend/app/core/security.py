@@ -76,3 +76,33 @@ def decode_token(token: str) -> dict[str, Any]:
         raise ValueError("Token inválido")
 
 
+def create_password_reset_token(user_id: int) -> str:
+    """Crea un token JWT para restablecer contraseña (expira en 1 hora)."""
+    to_encode = {
+        "sub": str(user_id),
+        "type": "password_reset"
+    }
+    expire = datetime.utcnow() + timedelta(hours=1)  # Token válido por 1 hora
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_alg)
+    return encoded_jwt
+
+
+def verify_password_reset_token(token: str) -> int | None:
+    """Verifica y decodifica un token de restablecimiento de contraseña.
+    
+    Returns:
+        user_id si el token es válido, None si es inválido o expirado.
+    """
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != "password_reset":
+            return None
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        return int(user_id)
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
