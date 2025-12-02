@@ -1,7 +1,11 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Integer, Boolean, DateTime, Table, Column, ForeignKey, PrimaryKeyConstraint
+from sqlalchemy import String, Integer, Boolean, DateTime, Table, Column, ForeignKey, PrimaryKeyConstraint, Index
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.cliente import Cliente
 
 # Tabla de asociación many-to-many usuarios <-> roles
 usuarios_roles_table = Table(
@@ -26,7 +30,11 @@ roles_permisos_table = Table(
 
 class Usuario(Base):
     __tablename__ = "usuarios"
-    __table_args__ = {"schema": "dbo"}
+    __table_args__ = (
+        Index("ix_usuarios_correo", "correo"),  # Índice para búsquedas por email (login)
+        Index("ix_usuarios_nombre_usuario", "nombre_usuario"),  # Índice para búsquedas por username
+        {"schema": "dbo"}
+    )
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     nombre_usuario: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
@@ -42,23 +50,30 @@ class Usuario(Base):
         secondary=usuarios_roles_table,
         back_populates="usuarios"
     )
+    # Relación opcional con Cliente: un usuario puede tener máximo un cliente asociado
+    cliente: Mapped["Cliente | None"] = relationship(
+        "Cliente",
+        back_populates="usuario",
+        uselist=False,  # One-to-one relationship
+    )
+    # CORREGIDO: Removido cascade="all, delete-orphan" para preservar historial
+    # Si se elimina un usuario, las órdenes se mantienen (solo se desvincula usuario_id)
     ordenes_compra: Mapped[list["OrdenCompra"]] = relationship(
         "OrdenCompra",
         back_populates="usuario",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
+        # cascade="save-update" permite actualizar, pero NO elimina órdenes al borrar usuario
     )
     ordenes_venta: Mapped[list["OrdenVenta"]] = relationship(
         "OrdenVenta",
         back_populates="usuario",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
+        foreign_keys="[OrdenVenta.usuario_id]",
+        # cascade="save-update" permite actualizar, pero NO elimina órdenes al borrar usuario
+        # foreign_keys especifica que solo use usuario_id, no repartidor_id
     )
     reservas: Mapped[list["Reserva"]] = relationship(
         "Reserva",
         back_populates="usuario",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
+        # cascade="save-update" permite actualizar, pero NO elimina reservas al borrar usuario
     )
 
 

@@ -11,6 +11,10 @@ if TYPE_CHECKING:  # pragma: no cover
     from app.models.marca import Marca
     from app.models.variante_producto import VarianteProducto
     from app.models.imagen_producto import ImagenProducto
+    from app.models.proveedor import Proveedor
+else:
+    # Importar la tabla de asociación para la relación
+    from app.models.proveedor import proveedor_producto_table
 
 
 class Producto(Base):
@@ -38,4 +42,9 @@ class Producto(Base):
         back_populates="producto",
         cascade="all, delete-orphan",
         order_by="ImagenProducto.id",
+    )
+    proveedores: Mapped[list["Proveedor"]] = relationship(
+        "Proveedor",
+        secondary=proveedor_producto_table,
+        back_populates="productos",
     )

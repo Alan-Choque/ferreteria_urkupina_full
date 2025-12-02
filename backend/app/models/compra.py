@@ -14,8 +14,19 @@ class OrdenCompra(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     proveedor_id: Mapped[int] = mapped_column(ForeignKey("dbo.proveedores.id"), nullable=False)
     fecha: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    estado: Mapped[str] = mapped_column(String(20), nullable=False)
+    estado: Mapped[str] = mapped_column(String(20), nullable=False)  # BORRADOR, ENVIADO, CONFIRMADO, RECHAZADO, RECIBIDO, FACTURADO, CERRADO
     usuario_id: Mapped[int | None] = mapped_column(ForeignKey("dbo.usuarios.id"), nullable=True)
+    
+    # Fechas de eventos
+    fecha_envio: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fecha_confirmacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fecha_recepcion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fecha_facturacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fecha_cierre: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    
+    # Información adicional
+    numero_factura_proveedor: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    observaciones: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     proveedor: Mapped["Proveedor"] = relationship("Proveedor", back_populates="ordenes_compra")
     usuario: Mapped["Usuario"] = relationship("Usuario", back_populates="ordenes_compra")
