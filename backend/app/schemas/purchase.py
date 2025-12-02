@@ -36,6 +36,13 @@ class PurchaseOrderResponse(BaseModel):
     usuario: Optional[PurchaseUser] = None
     items: List[PurchaseItemResponse]
     total: float
+    fecha_envio: Optional[datetime] = None
+    fecha_confirmacion: Optional[datetime] = None
+    fecha_recepcion: Optional[datetime] = None
+    fecha_facturacion: Optional[datetime] = None
+    fecha_cierre: Optional[datetime] = None
+    numero_factura_proveedor: Optional[str] = None
+    observaciones: Optional[str] = None
 
 
 class PurchaseOrderListResponse(BaseModel):

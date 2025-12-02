@@ -34,6 +34,22 @@ class ReservationResponse(BaseModel):
     cliente: Optional[ReservationCustomer] = None
     usuario: Optional[ReservationUser] = None
     items: List[ReservationItemResponse]
+    # Campos de anticipio
+    monto_anticipio: Optional[float] = None
+    fecha_anticipio: Optional[datetime] = None
+    metodo_pago_anticipio: Optional[str] = None
+    numero_comprobante_anticipio: Optional[str] = None
+    # Campos de confirmación
+    fecha_confirmacion: Optional[datetime] = None
+    fecha_recordatorio: Optional[datetime] = None
+    # Campos de completado
+    fecha_completado: Optional[datetime] = None
+    orden_venta_id: Optional[int] = None
+    # Observaciones
+    observaciones: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 
 class ReservationListResponse(BaseModel):

@@ -62,6 +62,32 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Request para solicitar recuperación de contraseña."""
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Request para restablecer contraseña con token."""
+    token: str = Field(..., description="Token de recuperación recibido por email")
+    new_password: str = Field(..., min_length=8, max_length=100, description="Nueva contraseña (mínimo 8 caracteres)")
+    
+    @field_validator('new_password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        """Valida que la contraseña tenga al menos 8 caracteres."""
+        if len(v) < 8:
+            raise ValueError('La contraseña debe tener al menos 8 caracteres')
+        return v
+
+
+class SocialAuthRequest(BaseModel):
+    """Request para autenticación con proveedores sociales."""
+    provider: str = Field(..., description="Proveedor OAuth (google, facebook, etc.)")
+    id_token: str = Field(..., description="ID token del proveedor OAuth")
+    access_token: str | None = Field(None, description="Access token del proveedor OAuth (opcional)")
+
+
 # Actualizar referencia forward para RegisterResponse
 RegisterResponse.model_rebuild()
 
