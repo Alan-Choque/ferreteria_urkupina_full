@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { motion } from "framer-motion"
+import { usePathname, useSearchParams } from "next/navigation"
+import { motion, AnimatePresence } from "framer-motion"
 import {
   productsService,
   type ProductCreatePayload,
@@ -28,8 +29,29 @@ import {
   ToggleLeft,
   Trash2,
   XCircle,
+  TrendingUp,
+  Package,
+  Image as ImageIcon,
+  Tag,
 } from "lucide-react"
 import jsPDF from "jspdf"
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  LineChart, 
+  Line,
+  PieChart,
+  Pie,
+  Cell
+} from "recharts"
+import { ChartContainer } from "@/components/ui/chart"
+import { usePermissions } from "@/lib/hooks/usePermissions"
+import { KPICard } from "@/components/admin/KPICard"
 
 interface FiltersState {
   q: string
@@ -57,7 +79,44 @@ const DEFAULT_IMAGE = (): ProductImageInput => ({
 })
 
 export default function ProductsPage() {
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const { canManageProducts } = usePermissions()
+  
+  // Detectar la acción desde la URL
+  const getActionFromPath = () => {
+    // Primero verificar query param (prioridad)
+    const actionParam = searchParams?.get("action")
+    if (actionParam) return actionParam
+    
+    // Si no hay query param, verificar la ruta
+    if (pathname.includes("/list")) return "list"
+    if (pathname.includes("/create")) return "create"
+    if (pathname.includes("/edit")) return "edit"
+    if (pathname.includes("/status")) return "status"
+    
+    // Si estamos en la ruta base sin action, mostrar dashboard
+    if (pathname === "/admin/products" || pathname === "/admin/products/") {
+      return null // Mostrar dashboard
+    }
+    
+    return null // Por defecto mostrar dashboard
+  }
+  
   const [selectedAction, setSelectedAction] = useState<string | null>(null)
+  
+  // Inicializar y actualizar selectedAction cuando cambia la ruta
+  useEffect(() => {
+    const action = getActionFromPath()
+    setSelectedAction(action)
+    // Sincronizar searchQuery con filters.q cuando se cambia a listado
+    if (action === "list") {
+      setSearchQuery(filters.q)
+    } else {
+      setSearchQuery("")
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, searchParams])
   const [products, setProducts] = useState<ProductListItem[]>([])
   const [totalProducts, setTotalProducts] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
@@ -70,6 +129,8 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [editingProductId, setEditingProductId] = useState<number | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedProductForVariants, setSelectedProductForVariants] = useState<ProductListItem | null>(null)
 
   const [createForm, setCreateForm] = useState<
     ProductCreatePayload & {
@@ -102,6 +163,38 @@ export default function ProductsPage() {
   })
 
   const normalizedUnits = useMemo(() => meta?.unidades ?? [], [meta])
+
+  // Calcular métricas para el dashboard (siempre se ejecutan)
+  const activeProducts = products.filter(p => p.status === "ACTIVE").length
+  const inactiveProducts = products.filter(p => p.status === "INACTIVE").length
+  const totalVariants = products.reduce((sum, p) => sum + (p.variantes?.length || 0), 0)
+  const productsWithImages = products.filter(p => p.imagenes && p.imagenes.length > 0).length
+
+  // Datos para gráfico de productos por categoría
+  const categoryData = useMemo(() => {
+    const categoryMap = new Map<string, number>()
+    products.forEach(p => {
+      const cat = p.categoria_nombre || "Sin categoría"
+      categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1)
+    })
+    return Array.from(categoryMap.entries()).map(([name, count]) => ({ name, value: count }))
+  }, [products])
+
+  // Datos para gráfico de productos por estado
+  const statusData = useMemo(() => [
+    { name: "Activos", value: activeProducts, color: "#10B981" },
+    { name: "Inactivos", value: inactiveProducts, color: "#EF4444" },
+  ], [activeProducts, inactiveProducts])
+
+  // Datos para gráfico de tendencia mensual (simulado)
+  const monthlyTrendData = useMemo(() => {
+    const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"]
+    return months.map((month, index) => ({
+      month,
+      productos: Math.floor(Math.random() * 50) + 100 + (index * 10),
+      variantes: Math.floor(Math.random() * 100) + 200 + (index * 15),
+    }))
+  }, [])
 
   const ensureVariantUnit = useCallback(
     (variant: ProductVariantInput): ProductVariantInput => {
@@ -165,42 +258,48 @@ export default function ProductsPage() {
     void bootstrap()
   }, [reloadProducts])
 
+  // Actualizar búsqueda cuando cambia searchQuery (solo para listado)
+  useEffect(() => {
+    if (selectedAction === "list" && searchQuery !== filters.q) {
+      const timer = setTimeout(() => {
+        reloadProducts({ q: searchQuery }, 1)
+      }, 300) // Debounce de 300ms
+      return () => clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, selectedAction])
+
   const actions: ActionItem[] = [
     {
       id: "list",
-      label: "Listar productos",
+      label: "Listar y buscar productos",
       description: "Consulta el catálogo con filtros, variantes e inventario asociado.",
       status: "disponible",
       icon: <Boxes className="h-5 w-5" />,
     },
-    {
-      id: "create",
-      label: "Registrar nuevo producto",
-      description: "Añade un nuevo producto con variantes e imágenes reales.",
-      status: "disponible",
-      icon: <PlusCircle className="h-5 w-5" />,
-    },
-    {
-      id: "edit",
-      label: "Modificar producto",
-      description: "Actualiza atributos, variantes e imágenes de un producto existente.",
-      status: "disponible",
-      icon: <PencilLine className="h-5 w-5" />,
-    },
-    {
-      id: "status",
-      label: "Cambio de estado",
-      description: "Activa o pausa productos y variantes según disponibilidad.",
-      status: "disponible",
-      icon: <ToggleLeft className="h-5 w-5" />,
-    },
-    {
-      id: "search",
-      label: "Buscar producto",
-      description: "Localiza productos por ID, SKU o nombre comercial.",
-      status: "disponible",
-      icon: <Search className="h-5 w-5" />,
-    },
+    ...(canManageProducts ? [
+      {
+        id: "create",
+        label: "Registrar nuevo producto",
+        description: "Añade un nuevo producto con variantes e imágenes reales.",
+        status: "disponible",
+        icon: <PlusCircle className="h-5 w-5" />,
+      },
+      {
+        id: "edit",
+        label: "Modificar producto",
+        description: "Actualiza atributos, variantes e imágenes de un producto existente.",
+        status: "disponible",
+        icon: <PencilLine className="h-5 w-5" />,
+      },
+      {
+        id: "status",
+        label: "Cambio de estado",
+        description: "Activa o pausa productos y variantes según disponibilidad.",
+        status: "disponible",
+        icon: <ToggleLeft className="h-5 w-5" />,
+      },
+    ] : []),
     {
       id: "print",
       label: "Imprimir listado",
@@ -493,37 +592,83 @@ export default function ProductsPage() {
     )
   }
 
-  const renderProductsTable = (options?: { showFilters?: boolean; highlightStatus?: boolean; sectionId?: string }) => {
-    const { showFilters = true, highlightStatus = true, sectionId } = options ?? {}
+  const renderProductsTable = (options?: { showFilters?: boolean; highlightStatus?: boolean; sectionId?: string; showEditButton?: boolean }) => {
+    const { showFilters = true, highlightStatus = true, sectionId, showEditButton = false } = options ?? {}
+    const isListAction = selectedAction === "list"
+    const PURPLE_COLORS = {
+      primary: "#8B5CF6",
+      secondary: "#A78BFA",
+      light: "#C4B5FD",
+      dark: "#6D28D9",
+      accent: "#EDE9FE",
+    }
+    const WHITE = "#FFFFFF"
+    
     return (
       <motion.div
         id={sectionId}
         key={`products-table-${showFilters ? "filters" : "compact"}`}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden text-white"
+        className="rounded-xl shadow-sm bg-white border overflow-hidden"
+        style={{ borderColor: PURPLE_COLORS.accent }}
       >
-        {showFilters && (
-          <div className="border-b border-gray-700 bg-gray-900/60 p-4 space-y-3">
+        {/* Buscador simple para listado (como usuarios) */}
+        {isListAction && (
+          <div className="p-4 border-b" style={{ borderColor: PURPLE_COLORS.accent }}>
+            <div className="relative">
+              <Search 
+                className="absolute left-3 top-1/2 transform -translate-y-1/2" 
+                size={18} 
+                style={{ color: PURPLE_COLORS.secondary }}
+              />
+              <input
+                type="text"
+                placeholder="Buscar por nombre o descripción..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setFilters(prev => ({ ...prev, q: e.target.value }))
+                }}
+                className="w-full pl-10 pr-4 py-2 rounded-lg border text-sm bg-white focus:outline-none"
+                style={{ 
+                  borderColor: PURPLE_COLORS.accent,
+                  color: "#1F2937"
+                }}
+              />
+            </div>
+          </div>
+        )}
+        
+        {showFilters && !isListAction && (
+          <div className="border-b p-4 space-y-3" style={{ borderColor: PURPLE_COLORS.accent, backgroundColor: PURPLE_COLORS.accent + "40" }}>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Buscar</label>
+                <label className="text-xs" style={{ color: PURPLE_COLORS.dark }}>Buscar</label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                  <Search className="absolute left-3 top-2.5 h-4 w-4" style={{ color: PURPLE_COLORS.secondary }} />
                   <input
                     value={filters.q}
                     onChange={(event) => handleFilterChange("q", event.target.value)}
                     placeholder="Nombre, descripción..."
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 pl-9 pr-3 text-sm focus:outline-none focus:border-orange-500"
+                    className="w-full border rounded-lg py-2 pl-9 pr-3 text-sm bg-white focus:outline-none"
+                    style={{ 
+                      borderColor: PURPLE_COLORS.accent,
+                      color: "#1F2937"
+                    }}
                   />
                 </div>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Marca</label>
+                <label className="text-xs" style={{ color: PURPLE_COLORS.dark }}>Marca</label>
                 <select
                   value={filters.brand_id}
                   onChange={(event) => handleFilterChange("brand_id", event.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-red-500"
+                  className="border rounded-lg py-2 px-3 text-sm bg-white focus:outline-none"
+                  style={{ 
+                    borderColor: PURPLE_COLORS.accent,
+                    color: "#1F2937"
+                  }}
                 >
                   <option value="">Todas</option>
                   {meta?.marcas.map((marca) => (
@@ -534,11 +679,15 @@ export default function ProductsPage() {
                 </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Categoría</label>
+                <label className="text-xs" style={{ color: PURPLE_COLORS.dark }}>Categoría</label>
                 <select
                   value={filters.category_id}
                   onChange={(event) => handleFilterChange("category_id", event.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-red-500"
+                  className="border rounded-lg py-2 px-3 text-sm bg-white focus:outline-none"
+                  style={{ 
+                    borderColor: PURPLE_COLORS.accent,
+                    color: "#1F2937"
+                  }}
                 >
                   <option value="">Todas</option>
                   {meta?.categorias.map((categoria) => (
@@ -549,11 +698,15 @@ export default function ProductsPage() {
                 </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Estado</label>
+                <label className="text-xs" style={{ color: PURPLE_COLORS.dark }}>Estado</label>
                 <select
                   value={filters.status}
                   onChange={(event) => handleFilterChange("status", event.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-red-500"
+                  className="border rounded-lg py-2 px-3 text-sm bg-white focus:outline-none"
+                  style={{ 
+                    borderColor: PURPLE_COLORS.accent,
+                    color: "#1F2937"
+                  }}
                 >
                   <option value="">Todos</option>
                   <option value="ACTIVE">Activo</option>
@@ -565,7 +718,10 @@ export default function ProductsPage() {
               <button
                 type="button"
                 onClick={handleApplyFilters}
-                className="inline-flex items-center gap-2 bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg text-sm"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-white transition-colors"
+                style={{ backgroundColor: PURPLE_COLORS.primary }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = PURPLE_COLORS.dark}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = PURPLE_COLORS.primary}
                 disabled={loading}
               >
                 <Search size={16} /> Aplicar filtros
@@ -573,7 +729,14 @@ export default function ProductsPage() {
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="inline-flex items-center gap-2 border border-gray-600 px-4 py-2 rounded-lg text-sm text-gray-200 hover:bg-gray-700/60"
+                className="inline-flex items-center gap-2 border px-4 py-2 rounded-lg text-sm transition-colors"
+                style={{ 
+                  borderColor: PURPLE_COLORS.accent,
+                  backgroundColor: WHITE,
+                  color: PURPLE_COLORS.primary
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = PURPLE_COLORS.accent}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = WHITE}
                 disabled={loading}
               >
                 <RefreshCw size={16} /> Limpiar
@@ -583,41 +746,48 @@ export default function ProductsPage() {
         )}
 
         {loading ? (
-          <div className="p-6 flex items-center justify-center text-gray-300">
+          <div className="p-6 flex items-center justify-center" style={{ color: PURPLE_COLORS.secondary }}>
             <Loader2 className="animate-spin mr-2 h-4 w-4" /> Cargando productos...
           </div>
         ) : products.length === 0 ? (
-          <div className="p-6 text-center text-gray-300">No se encontraron productos con los filtros actuales.</div>
+          <div className="p-6 text-center space-y-2" style={{ color: "#6B7280" }}>
+            <p>No se encontraron productos con los filtros actuales.</p>
+            {filters.category_id && (
+              <p className="text-xs" style={{ color: "#9CA3AF" }}>
+                La categoría seleccionada no tiene productos asignados. Verifica en la base de datos si los productos tienen esta categoría asignada.
+              </p>
+            )}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-900 border-b border-gray-700">
+              <thead className="border-b" style={{ backgroundColor: PURPLE_COLORS.accent, borderColor: PURPLE_COLORS.accent }}>
                 <tr>
-                  <th className="px-6 py-3 text-left font-semibold">ID</th>
-                  <th className="px-6 py-3 text-left font-semibold">Producto</th>
-                  <th className="px-6 py-3 text-left font-semibold">Marca</th>
-                  <th className="px-6 py-3 text-left font-semibold">Categoría</th>
-                  <th className="px-6 py-3 text-left font-semibold">Precio</th>
-                  <th className="px-6 py-3 text-left font-semibold">Variantes</th>
-                  <th className="px-6 py-3 text-left font-semibold">Estado</th>
-                  <th className="px-6 py-3 text-right font-semibold">Acciones</th>
+                  <th className="px-6 py-3 text-left font-semibold" style={{ color: PURPLE_COLORS.dark }}>ID</th>
+                  <th className="px-6 py-3 text-left font-semibold" style={{ color: PURPLE_COLORS.dark }}>Producto</th>
+                  <th className="px-6 py-3 text-left font-semibold" style={{ color: PURPLE_COLORS.dark }}>Marca</th>
+                  <th className="px-6 py-3 text-left font-semibold" style={{ color: PURPLE_COLORS.dark }}>Categoría</th>
+                  <th className="px-6 py-3 text-left font-semibold" style={{ color: PURPLE_COLORS.dark }}>Precio</th>
+                  <th className="px-6 py-3 text-left font-semibold" style={{ color: PURPLE_COLORS.dark }}>Variantes</th>
+                  <th className="px-6 py-3 text-left font-semibold" style={{ color: PURPLE_COLORS.dark }}>Estado</th>
+                  <th className="px-6 py-3 text-right font-semibold" style={{ color: PURPLE_COLORS.dark }}>Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y" style={{ borderColor: PURPLE_COLORS.accent }}>
                 {products.map((product) => (
-                  <tr key={product.id} className="hover:bg-gray-700/40 transition-colors">
-                    <td className="px-6 py-4 font-mono text-gray-400">{product.id}</td>
-                    <td className="px-6 py-4 text-gray-100">
+                  <tr key={product.id} className="hover:bg-opacity-50 transition-colors" style={{ backgroundColor: "transparent" }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = PURPLE_COLORS.accent} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}>
+                    <td className="px-6 py-4 font-mono" style={{ color: "#6B7280" }}>{product.id}</td>
+                    <td className="px-6 py-4" style={{ color: "#1F2937" }}>
                       <div className="flex flex-col">
                         <span className="font-semibold">{product.nombre}</span>
                         {product.short && (
-                          <span className="text-xs text-gray-400 line-clamp-2">{product.short}</span>
+                          <span className="text-xs line-clamp-2" style={{ color: "#6B7280" }}>{product.short}</span>
                         )}
                       </div>
                       </td>
-                    <td className="px-6 py-4 text-gray-300">{product.marca?.nombre ?? "-"}</td>
-                    <td className="px-6 py-4 text-gray-300">{product.categoria?.nombre ?? "-"}</td>
-                    <td className="px-6 py-4 text-gray-200">
+                    <td className="px-6 py-4" style={{ color: "#6B7280" }}>{product.marca?.nombre ?? "-"}</td>
+                    <td className="px-6 py-4" style={{ color: "#6B7280" }}>{product.categoria?.nombre ?? "-"}</td>
+                    <td className="px-6 py-4" style={{ color: "#1F2937" }}>
                       {product.price !== undefined && product.price !== null
                         ? new Intl.NumberFormat("es-BO", {
                             style: "currency",
@@ -626,31 +796,50 @@ export default function ProductsPage() {
                           }).format(product.price)
                         : "-"}
                     </td>
-                    <td className="px-6 py-4 text-gray-300">{product.variantes?.length ?? 0}</td>
+                    <td className="px-6 py-4" style={{ color: "#6B7280" }}>
+                      <div className="flex items-center gap-2">
+                        <span>{product.variantes?.length ?? 0}</span>
+                        {product.variantes && product.variantes.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedProductForVariants(product)}
+                            className="text-xs px-2 py-1 rounded hover:opacity-80 transition-opacity text-white"
+                            style={{ backgroundColor: PURPLE_COLORS.primary }}
+                            title="Ver variantes"
+                          >
+                            Ver
+                          </button>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4">{highlightStatus ? renderStatusBadge(product.status) : product.status}</td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                          type="button"
-                          onClick={() => openEditProduct(product.id)}
-                          className="inline-flex items-center gap-1 text-gray-300 hover:text-blue-400 transition-colors"
-                        >
-                          <Edit2 size={16} />
-                          <span className="hidden sm:inline">Editar</span>
-                          </button>
-                        {highlightStatus && (
-                          <button
-                            type="button"
-                            onClick={() => handleToggleStatus(product)}
-                            className="inline-flex items-center gap-1 text-gray-300 hover:text-amber-400 transition-colors"
-                            disabled={saving}
-                          >
-                            {product.status.toUpperCase() === "ACTIVE" ? <XCircle size={16} /> : <CheckCircle size={16} />}
-                            <span className="hidden sm:inline">
-                              {product.status.toUpperCase() === "ACTIVE" ? "Desactivar" : "Activar"}
-                            </span>
-                          </button>
-                        )}
+                          {canManageProducts && (
+                            <button
+                              type="button"
+                              onClick={() => openEditProduct(product.id)}
+                              className="inline-flex items-center gap-1 hover:opacity-80 transition-opacity"
+                              style={{ color: PURPLE_COLORS.primary }}
+                            >
+                              <Edit2 size={16} />
+                              <span className="hidden sm:inline">Editar</span>
+                            </button>
+                          )}
+                          {highlightStatus && canManageProducts && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStatus(product)}
+                              className="inline-flex items-center gap-1 hover:opacity-80 transition-opacity"
+                              style={{ color: "#F59E0B" }}
+                              disabled={saving}
+                            >
+                              {product.status.toUpperCase() === "ACTIVE" ? <XCircle size={16} /> : <CheckCircle size={16} />}
+                              <span className="hidden sm:inline">
+                                {product.status.toUpperCase() === "ACTIVE" ? "Desactivar" : "Activar"}
+                              </span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -660,25 +849,42 @@ export default function ProductsPage() {
           </div>
         )}
         {!loading && products.length > 0 && (
-          <div className="border-t border-gray-700 bg-gray-900/60 p-4 flex items-center justify-between">
-            <div className="text-sm text-gray-300">
+          <div className="border-t p-4 flex items-center justify-between" style={{ borderColor: PURPLE_COLORS.accent, backgroundColor: PURPLE_COLORS.accent + "40" }}>
+            <div className="text-sm" style={{ color: "#6B7280" }}>
               Mostrando {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalProducts)} de {totalProducts} productos
+              <span className="ml-3 text-xs" style={{ color: "#9CA3AF" }}>
+                (Ordenados por fecha de creación, más recientes primero)
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1 || loading}
-                className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 border rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ 
+                  borderColor: PURPLE_COLORS.accent,
+                  backgroundColor: WHITE,
+                  color: PURPLE_COLORS.primary
+                }}
+                onMouseEnter={(e) => !(currentPage === 1 || loading) && (e.currentTarget.style.backgroundColor = PURPLE_COLORS.accent)}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = WHITE}
               >
                 Anterior
               </button>
-              <span className="text-sm text-gray-300">
+              <span className="text-sm" style={{ color: "#6B7280" }}>
                 Página {currentPage} de {Math.ceil(totalProducts / pageSize)}
               </span>
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage >= Math.ceil(totalProducts / pageSize) || loading}
-                className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 border rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ 
+                  borderColor: PURPLE_COLORS.accent,
+                  backgroundColor: WHITE,
+                  color: PURPLE_COLORS.primary
+                }}
+                onMouseEnter={(e) => !(currentPage >= Math.ceil(totalProducts / pageSize) || loading) && (e.currentTarget.style.backgroundColor = PURPLE_COLORS.accent)}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = WHITE}
               >
                 Siguiente
               </button>
@@ -689,361 +895,172 @@ export default function ProductsPage() {
     )
   }
 
-  const renderCreateForm = () => (
-          <motion.div
-      id="products-section-create"
-      key="create-wrapper"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-lg p-6 space-y-6 text-white"
-    >
-      {metaLoading || !meta ? (
-        <div className="flex items-center gap-3 text-gray-300">
-          <Loader2 className="h-5 w-5 animate-spin" /> Cargando catálogos para registrar productos...
+  const renderCreateForm = () => {
+    const PURPLE_COLORS = {
+      primary: "#8B5CF6",
+      secondary: "#A78BFA",
+      light: "#C4B5FD",
+      dark: "#6D28D9",
+      accent: "#EDE9FE",
+    }
+    const WHITE = "#FFFFFF"
+
+    return (
+      <motion.div
+        id="products-section-create"
+        key="create-wrapper"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-xl shadow-sm bg-white border p-6 space-y-6"
+        style={{ borderColor: PURPLE_COLORS.accent }}
+      >
+        {metaLoading || !meta ? (
+          <div className="flex items-center gap-3" style={{ color: PURPLE_COLORS.secondary }}>
+            <Loader2 className="h-5 w-5 animate-spin" /> Cargando catálogos para registrar productos...
+          </div>
+        ) : (
+          <form onSubmit={handleSubmitCreate} className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold" style={{ color: PURPLE_COLORS.dark }}>Nuevo producto</h2>
+              {saving && <Loader2 className="animate-spin h-5 w-5" style={{ color: PURPLE_COLORS.secondary }} />}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm" style={{ color: PURPLE_COLORS.dark }}>Nombre *</label>
+                <input
+                  required
+                  value={createForm.nombre}
+                  onChange={(event) => setCreateForm((prev) => ({ ...prev, nombre: event.target.value }))}
+                  className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                  style={{ 
+                    borderColor: PURPLE_COLORS.accent,
+                    color: "#1F2937"
+                  }}
+                />
               </div>
-      ) : (
-        <form onSubmit={handleSubmitCreate} className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Nuevo producto</h2>
-            {saving && <Loader2 className="animate-spin h-5 w-5 text-gray-300" />}
-                  </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-300">Nombre *</label>
-                    <input
-                      required
-                value={createForm.nombre}
-                onChange={(event) => setCreateForm((prev) => ({ ...prev, nombre: event.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                    />
-                  </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-300">Estado</label>
-              <select
-                value={createForm.status ?? "ACTIVE"}
-                onChange={(event) => setCreateForm((prev) => ({ ...prev, status: event.target.value as ProductCreatePayload["status"] }))}
-                className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-              >
-                <option value="ACTIVE">Activo</option>
-                <option value="INACTIVE">Inactivo</option>
-              </select>
-                </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-300">Marca</label>
-                    <select
-                value={createForm.marca_id ?? ""}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    marca_id: event.target.value ? Number(event.target.value) : undefined,
-                  }))
-                }
-                className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-              >
-                <option value="">Sin marca</option>
-                {meta?.marcas.map((marca) => (
-                  <option key={marca.id} value={marca.id}>
-                    {marca.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-300">Categoría</label>
-                    <select
-                value={createForm.categoria_id ?? ""}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    categoria_id: event.target.value ? Number(event.target.value) : undefined,
-                  }))
-                }
-                className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-              >
-                <option value="">Sin categoría</option>
-                {meta?.categorias.map((categoria) => (
-                  <option key={categoria.id} value={categoria.id}>
-                    {categoria.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="text-sm text-gray-300">Descripción</label>
-                  <textarea
-              value={createForm.descripcion ?? ""}
-              onChange={(event) => setCreateForm((prev) => ({ ...prev, descripcion: event.target.value }))}
-              rows={3}
-              className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                  />
-                </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Variantes</h3>
-              <button
-                type="button"
-                onClick={handleAddCreateVariant}
-                className="inline-flex items-center gap-2 text-sm bg-gray-900 px-3 py-2 rounded-lg border border-gray-700 hover:border-orange-500"
-              >
-                <Plus size={16} /> Variante
-              </button>
-            </div>
-            <div className="space-y-3">
-              {createForm.variantes.map((variant, index) => (
-                <div key={`create-variant-${index}`} className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-gray-900/60 border border-gray-700 rounded-lg p-4">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs text-gray-400">Nombre</label>
-                    <input
-                      value={variant.nombre ?? ""}
-                      onChange={(event) => handleCreateVariantChange(index, { nombre: event.target.value })}
-                      className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs text-gray-400">Unidad de medida *</label>
-                    <select
-                      value={variant.unidad_medida_id}
-                      onChange={(event) => handleCreateVariantChange(index, { unidad_medida_id: Number(event.target.value) })}
-                      className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
-                      required
-                    >
-                      <option value={0}>Seleccionar unidad</option>
-                      {normalizedUnits.map((unit) => (
-                        <option key={unit.id} value={unit.id}>
-                          {unit.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs text-gray-400">Precio</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={variant.precio ?? ""}
-                      onChange={(event) => handleCreateVariantChange(index, { precio: event.target.value ? Number(event.target.value) : undefined })}
-                      className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
-                    />
-                </div>
-                  <div className="flex items-end justify-end">
-                    {createForm.variantes.length > 1 && (
-                  <button
-                    type="button"
-                        onClick={() => handleRemoveCreateVariant(index)}
-                        className="inline-flex items-center gap-1 text-sm text-red-400 hover:text-red-300"
-                  >
-                        <Trash2 size={16} /> Quitar
-                  </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Imágenes</h3>
-              <button
-                type="button"
-                onClick={handleAddCreateImage}
-                className="inline-flex items-center gap-2 text-sm bg-gray-900 px-3 py-2 rounded-lg border border-gray-700 hover:border-orange-500"
-              >
-                <Plus size={16} /> Imagen
-              </button>
-            </div>
-            {createForm.imagenes.length === 0 && (
-              <p className="text-sm text-gray-400">Puedes añadir imágenes opcionales para ilustrar el producto.</p>
-            )}
-            <div className="space-y-3">
-              {createForm.imagenes.map((image, index) => (
-                <div key={`create-image-${index}`} className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-gray-900/60 border border-gray-700 rounded-lg p-4">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs text-gray-400">URL *</label>
-                    <input
-                      required
-                      value={image.url}
-                      onChange={(event) => handleCreateImageChange(index, { url: event.target.value })}
-                      className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs text-gray-400">Descripción</label>
-                    <input
-                      value={image.descripcion ?? ""}
-                      onChange={(event) => handleCreateImageChange(index, { descripcion: event.target.value })}
-                      className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
-                    />
-                  </div>
-                  <div className="md:col-span-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveCreateImage(index)}
-                      className="inline-flex items-center gap-1 text-sm text-red-400 hover:text-red-300"
-                    >
-                      <Trash2 size={16} /> Quitar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-3">
-                  <button
-                    type="submit"
-              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm"
-              disabled={saving}
-                  >
-              Guardar producto
-                  </button>
-                </div>
-              </form>
-        )}
-    </motion.div>
-  )
-
-  const renderEditForm = () => (
-          <motion.div
-      key="edit-wrapper"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-lg p-6 space-y-6 text-white"
-      id="products-section-edit"
-    >
-      {editingProductId === null ? (
-        <div className="bg-gray-900/60 border border-gray-700 rounded-lg p-6 text-center text-gray-300">
-          <p className="mb-3">Elige un producto desde el listado y haz clic en "Editar" para cargarlo aquí.</p>
-                <button
-            type="button"
-            onClick={() => setSelectedAction(null)}
-            className="inline-flex items-center gap-2 bg-gray-900 border border-gray-700 hover:border-red-500"
+              <div className="flex flex-col gap-2">
+                <label className="text-sm" style={{ color: PURPLE_COLORS.dark }}>Estado</label>
+                <select
+                  value={createForm.status ?? "ACTIVE"}
+                  onChange={(event) => setCreateForm((prev) => ({ ...prev, status: event.target.value as ProductCreatePayload["status"] }))}
+                  className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                  style={{ 
+                    borderColor: PURPLE_COLORS.accent,
+                    color: "#1F2937"
+                  }}
                 >
-            <Search size={16} /> Volver al menú
+                  <option value="ACTIVE">Activo</option>
+                  <option value="INACTIVE">Inactivo</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm" style={{ color: PURPLE_COLORS.dark }}>Marca</label>
+                <select
+                  value={createForm.marca_id ?? ""}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      marca_id: event.target.value ? Number(event.target.value) : undefined,
+                    }))
+                  }
+                  className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                  style={{ 
+                    borderColor: PURPLE_COLORS.accent,
+                    color: "#1F2937"
+                  }}
+                >
+                  <option value="">Sin marca</option>
+                  {meta?.marcas.map((marca) => (
+                    <option key={marca.id} value={marca.id}>
+                      {marca.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm" style={{ color: PURPLE_COLORS.dark }}>Categoría</label>
+                <select
+                  value={createForm.categoria_id ?? ""}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      categoria_id: event.target.value ? Number(event.target.value) : undefined,
+                    }))
+                  }
+                  className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                  style={{ 
+                    borderColor: PURPLE_COLORS.accent,
+                    color: "#1F2937"
+                  }}
+                >
+                  <option value="">Sin categoría</option>
+                  {meta?.categorias.map((categoria) => (
+                    <option key={categoria.id} value={categoria.id}>
+                      {categoria.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-sm" style={{ color: PURPLE_COLORS.dark }}>Descripción</label>
+              <textarea
+                value={createForm.descripcion ?? ""}
+                onChange={(event) => setCreateForm((prev) => ({ ...prev, descripcion: event.target.value }))}
+                rows={3}
+                className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                style={{ 
+                  borderColor: PURPLE_COLORS.accent,
+                  color: "#1F2937"
+                }}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold" style={{ color: PURPLE_COLORS.dark }}>Variantes</h3>
+                <button
+                  type="button"
+                  onClick={handleAddCreateVariant}
+                  className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border transition-colors"
+                  style={{ 
+                    borderColor: PURPLE_COLORS.accent,
+                    backgroundColor: WHITE,
+                    color: PURPLE_COLORS.primary
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = PURPLE_COLORS.accent}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = WHITE}
+                >
+                  <Plus size={16} /> Variante
                 </button>
               </div>
-      ) : metaLoading && !meta ? (
-        <div className="flex items-center gap-3 text-gray-300">
-          <Loader2 className="h-5 w-5 animate-spin" /> Cargando catálogos para editar...
-        </div>
-      ) : (
-        <form onSubmit={handleSubmitEdit} className="space-y-6">
-          <div className="flex items-center justify-between">
-                <div>
-              <h2 className="text-xl font-semibold">Editar producto</h2>
-              {editingProductId ? (
-                <p className="text-sm text-gray-400">ID seleccionado: {editingProductId}</p>
-              ) : (
-                <p className="text-sm text-gray-400">Selecciona un producto desde el listado para editarlo.</p>
-              )}
-            </div>
-            {saving && <Loader2 className="animate-spin h-5 w-5 text-gray-300" />}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-300">Nombre</label>
-                  <input
-                    required
-                value={editForm.nombre ?? ""}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, nombre: event.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                  />
-                </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-300">Estado</label>
-              <select
-                value={editForm.status ?? "ACTIVE"}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, status: event.target.value as ProductUpdatePayload["status"] }))}
-                className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-              >
-                <option value="ACTIVE">Activo</option>
-                <option value="INACTIVE">Inactivo</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-300">Marca</label>
-              <select
-                value={editForm.marca_id ?? ""}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, marca_id: event.target.value ? Number(event.target.value) : undefined }))}
-                className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-              >
-                <option value="">Sin marca</option>
-                {meta?.marcas.map((marca) => (
-                  <option key={marca.id} value={marca.id}>
-                    {marca.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-300">Categoría</label>
-              <select
-                value={editForm.categoria_id ?? ""}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, categoria_id: event.target.value ? Number(event.target.value) : undefined }))}
-                className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-              >
-                <option value="">Sin categoría</option>
-                {meta?.categorias.map((categoria) => (
-                  <option key={categoria.id} value={categoria.id}>
-                    {categoria.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="text-sm text-gray-300">Descripción</label>
-            <textarea
-              value={editForm.descripcion ?? ""}
-              onChange={(event) => setEditForm((prev) => ({ ...prev, descripcion: event.target.value }))}
-              rows={3}
-              className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Variantes</h3>
-              <button
-                type="button"
-                onClick={handleAddEditVariant}
-                className="inline-flex items-center gap-2 text-sm bg-gray-900 px-3 py-2 rounded-lg border border-gray-700 hover:border-orange-500"
-              >
-                <Plus size={16} /> Variante
-              </button>
-            </div>
-            {editForm.variantes.length === 0 && <p className="text-sm text-gray-400">No hay variantes registradas.</p>}
-            <div className="space-y-3">
-              {editForm.variantes.map((variant, index) => {
-                const markedForDeletion = Boolean(variant.delete)
-                return (
-                  <div
-                    key={`edit-variant-${variant.id ?? index}`}
-                    className={`grid grid-cols-1 md:grid-cols-4 gap-3 border rounded-lg p-4 ${
-                      markedForDeletion ? "border-red-700 bg-red-900/20" : "border-gray-700 bg-gray-900/60"
-                    }`}
-                  >
+              <div className="space-y-3">
+                {createForm.variantes.map((variant, index) => (
+                  <div key={`create-variant-${index}`} className="grid grid-cols-1 md:grid-cols-4 gap-3 border rounded-lg p-4" style={{ borderColor: PURPLE_COLORS.accent, backgroundColor: PURPLE_COLORS.accent + "40" }}>
                     <div className="flex flex-col gap-2">
-                      <label className="text-xs text-gray-400">Nombre</label>
-                  <input
+                      <label className="text-xs" style={{ color: PURPLE_COLORS.dark }}>Nombre</label>
+                      <input
                         value={variant.nombre ?? ""}
-                        onChange={(event) => handleEditVariantChange(index, { nombre: event.target.value })}
-                        disabled={markedForDeletion}
-                        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 disabled:opacity-60"
-                  />
-                </div>
+                        onChange={(event) => handleCreateVariantChange(index, { nombre: event.target.value })}
+                        className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                        style={{ 
+                          borderColor: PURPLE_COLORS.accent,
+                          color: "#1F2937"
+                        }}
+                      />
+                    </div>
                     <div className="flex flex-col gap-2">
-                      <label className="text-xs text-gray-400">Unidad</label>
+                      <label className="text-xs" style={{ color: PURPLE_COLORS.dark }}>Unidad de medida *</label>
                       <select
                         value={variant.unidad_medida_id}
-                        onChange={(event) => handleEditVariantChange(index, { unidad_medida_id: Number(event.target.value) })}
-                        disabled={markedForDeletion}
-                        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 disabled:opacity-60"
+                        onChange={(event) => handleCreateVariantChange(index, { unidad_medida_id: Number(event.target.value) })}
+                        className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                        style={{ 
+                          borderColor: PURPLE_COLORS.accent,
+                          color: "#1F2937"
+                        }}
+                        required
                       >
                         <option value={0}>Seleccionar unidad</option>
                         {normalizedUnits.map((unit) => (
@@ -1054,105 +1071,465 @@ export default function ProductsPage() {
                       </select>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <label className="text-xs text-gray-400">Precio</label>
-                  <input
-                    type="number"
-                    step="0.01"
+                      <label className="text-xs" style={{ color: PURPLE_COLORS.dark }}>Precio</label>
+                      <input
+                        type="number"
+                        step="0.01"
                         value={variant.precio ?? ""}
-                        onChange={(event) => handleEditVariantChange(index, { precio: event.target.value ? Number(event.target.value) : undefined })}
-                        disabled={markedForDeletion}
-                        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 disabled:opacity-60"
-                  />
-                </div>
+                        onChange={(event) => handleCreateVariantChange(index, { precio: event.target.value ? Number(event.target.value) : undefined })}
+                        className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                        style={{ 
+                          borderColor: PURPLE_COLORS.accent,
+                          color: "#1F2937"
+                        }}
+                      />
+                    </div>
                     <div className="flex items-end justify-end">
-                  <button
-                    type="button"
-                        onClick={() => handleRemoveEditVariant(index)}
-                        className={`inline-flex items-center gap-1 text-sm ${
-                          markedForDeletion ? "text-green-400 hover:text-green-300" : "text-red-400 hover:text-red-300"
-                        }`}
-                      >
-                        {markedForDeletion ? <RefreshCw size={16} /> : <Trash2 size={16} />}
-                        {markedForDeletion ? "Restaurar" : "Eliminar"}
-                  </button>
+                      {createForm.variantes.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCreateVariant(index)}
+                          className="inline-flex items-center gap-1 text-sm hover:opacity-80 transition-opacity text-red-500"
+                        >
+                          <Trash2 size={16} /> Quitar
+                        </button>
+                      )}
                     </div>
                   </div>
-                )
-              })}
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Imágenes</h3>
-              <button
-                type="button"
-                onClick={handleAddEditImage}
-                className="inline-flex items-center gap-2 text-sm bg-gray-900 px-3 py-2 rounded-lg border border-gray-700 hover:border-orange-500"
-              >
-                <Plus size={16} /> Imagen
-              </button>
-            </div>
-            {editForm.imagenes.length === 0 && <p className="text-sm text-gray-400">Sin imágenes asociadas.</p>}
             <div className="space-y-3">
-              {editForm.imagenes.map((image, index) => {
-                const markedForDeletion = Boolean(image.delete)
-                return (
-                  <div
-                    key={`edit-image-${image.id ?? index}`}
-                    className={`grid grid-cols-1 md:grid-cols-2 gap-3 border rounded-lg p-4 ${
-                      markedForDeletion ? "border-red-700 bg-red-900/20" : "border-gray-700 bg-gray-900/60"
-                    }`}
-                  >
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold" style={{ color: PURPLE_COLORS.dark }}>Imágenes</h3>
+                <button
+                  type="button"
+                  onClick={handleAddCreateImage}
+                  className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border transition-colors"
+                  style={{ 
+                    borderColor: PURPLE_COLORS.accent,
+                    backgroundColor: WHITE,
+                    color: PURPLE_COLORS.primary
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = PURPLE_COLORS.accent}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = WHITE}
+                >
+                  <Plus size={16} /> Imagen
+                </button>
+              </div>
+              {createForm.imagenes.length === 0 && (
+                <p className="text-sm" style={{ color: "#6B7280" }}>Puedes añadir imágenes opcionales para ilustrar el producto.</p>
+              )}
+              <div className="space-y-3">
+                {createForm.imagenes.map((image, index) => (
+                  <div key={`create-image-${index}`} className="grid grid-cols-1 md:grid-cols-2 gap-3 border rounded-lg p-4" style={{ borderColor: PURPLE_COLORS.accent, backgroundColor: PURPLE_COLORS.accent + "40" }}>
                     <div className="flex flex-col gap-2">
-                      <label className="text-xs text-gray-400">URL</label>
+                      <label className="text-xs" style={{ color: PURPLE_COLORS.dark }}>URL *</label>
                       <input
+                        required
                         value={image.url}
-                        onChange={(event) => handleEditImageChange(index, { url: event.target.value })}
-                        disabled={markedForDeletion}
-                        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 disabled:opacity-60"
+                        onChange={(event) => handleCreateImageChange(index, { url: event.target.value })}
+                        className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                        style={{ 
+                          borderColor: PURPLE_COLORS.accent,
+                          color: "#1F2937"
+                        }}
                       />
                     </div>
                     <div className="flex flex-col gap-2">
-                      <label className="text-xs text-gray-400">Descripción</label>
+                      <label className="text-xs" style={{ color: PURPLE_COLORS.dark }}>Descripción</label>
                       <input
                         value={image.descripcion ?? ""}
-                        onChange={(event) => handleEditImageChange(index, { descripcion: event.target.value })}
-                        disabled={markedForDeletion}
-                        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 disabled:opacity-60"
+                        onChange={(event) => handleCreateImageChange(index, { descripcion: event.target.value })}
+                        className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                        style={{ 
+                          borderColor: PURPLE_COLORS.accent,
+                          color: "#1F2937"
+                        }}
                       />
                     </div>
                     <div className="md:col-span-2 flex justify-end">
                       <button
                         type="button"
-                        onClick={() => handleRemoveEditImage(index)}
-                        className={`inline-flex items-center gap-1 text-sm ${
-                          markedForDeletion ? "text-green-400 hover:text-green-300" : "text-red-400 hover:text-red-300"
-                        }`}
+                        onClick={() => handleRemoveCreateImage(index)}
+                        className="inline-flex items-center gap-1 text-sm hover:opacity-80 transition-opacity text-red-500"
                       >
-                        {markedForDeletion ? <RefreshCw size={16} /> : <Trash2 size={16} />}
-                        {markedForDeletion ? "Restaurar" : "Eliminar"}
+                        <Trash2 size={16} /> Quitar
                       </button>
                     </div>
                   </div>
-                )
-              })}
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center justify-end gap-3">
-                  <button
-                    type="submit"
-              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm"
-              disabled={saving}
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg text-sm text-white transition-colors disabled:opacity-60"
+                style={{ backgroundColor: PURPLE_COLORS.primary }}
+                onMouseEnter={(e) => !saving && (e.currentTarget.style.backgroundColor = PURPLE_COLORS.dark)}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = PURPLE_COLORS.primary}
+                disabled={saving}
+              >
+                Guardar producto
+              </button>
+            </div>
+          </form>
+        )}
+      </motion.div>
+    )
+  }
+
+  const renderEditForm = () => {
+    // Si no hay producto seleccionado, mostrar lista para seleccionar
+    if (editingProductId === null) {
+      return (
+          <motion.div
+          key="edit-select"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          <div className="rounded-xl shadow-sm bg-white border p-6" style={{ borderColor: "#EDE9FE" }}>
+            <h2 className="text-xl font-semibold mb-2" style={{ color: "#6D28D9" }}>Modificar Producto</h2>
+            <p className="text-sm mb-4" style={{ color: "#6B7280" }}>
+              Selecciona un producto de la lista para editarlo. Puedes buscar por nombre, marca o categoría.
+            </p>
+          </div>
+          {renderProductsTable({ 
+            showFilters: true, 
+            highlightStatus: false, 
+            sectionId: "products-section-edit-select",
+            showEditButton: true 
+          })}
+        </motion.div>
+      )
+    }
+
+    // Si hay producto seleccionado, mostrar formulario de edición
+    return (
+            <motion.div
+        key="edit-wrapper"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-6"
+        id="products-section-edit"
+      >
+        {metaLoading && !meta ? (
+          <div className="rounded-xl shadow-sm bg-white border p-6 flex items-center gap-3" style={{ borderColor: "#EDE9FE", color: "#A78BFA" }}>
+            <Loader2 className="h-5 w-5 animate-spin" /> Cargando catálogos para editar...
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="rounded-xl shadow-sm bg-white border p-4 flex items-center justify-between" style={{ borderColor: "#EDE9FE" }}>
+              <div>
+                <h2 className="text-xl font-semibold" style={{ color: "#6D28D9" }}>Editando Producto</h2>
+                <p className="text-sm" style={{ color: "#6B7280" }}>ID: {editingProductId}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingProductId(null)
+                  setEditForm({
+                    nombre: undefined,
+                    descripcion: undefined,
+                    categoria_id: undefined,
+                    marca_id: undefined,
+                    status: undefined,
+                    variantes: [],
+                    imagenes: [],
+                  })
+                }}
+                className="px-4 py-2 rounded-lg text-sm transition-colors"
+                style={{ 
+                  borderColor: "#EDE9FE",
+                  backgroundColor: "#FFFFFF",
+                  color: "#8B5CF6"
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#EDE9FE"}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#FFFFFF"}
+              >
+                Seleccionar otro producto
+              </button>
+            </div>
+            <form onSubmit={handleSubmitEdit} className="rounded-xl shadow-sm bg-white border p-6 space-y-6" style={{ borderColor: "#EDE9FE" }}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold" style={{ color: "#6D28D9" }}>Formulario de edición</h3>
+                {saving && <Loader2 className="animate-spin h-5 w-5" style={{ color: "#A78BFA" }} />}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm" style={{ color: "#6D28D9" }}>Nombre</label>
+                  <input
+                    required
+                    value={editForm.nombre ?? ""}
+                    onChange={(event) => setEditForm((prev) => ({ ...prev, nombre: event.target.value }))}
+                    className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                    style={{ 
+                      borderColor: "#EDE9FE",
+                      color: "#1F2937"
+                    }}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm" style={{ color: "#6D28D9" }}>Estado</label>
+                  <select
+                    value={editForm.status ?? "ACTIVE"}
+                    onChange={(event) => setEditForm((prev) => ({ ...prev, status: event.target.value as ProductUpdatePayload["status"] }))}
+                    className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                    style={{ 
+                      borderColor: "#EDE9FE",
+                      color: "#1F2937"
+                    }}
                   >
-              Guardar cambios
+                    <option value="ACTIVE">Activo</option>
+                    <option value="INACTIVE">Inactivo</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm" style={{ color: "#6D28D9" }}>Marca</label>
+                  <select
+                    value={editForm.marca_id ?? ""}
+                    onChange={(event) => setEditForm((prev) => ({ ...prev, marca_id: event.target.value ? Number(event.target.value) : undefined }))}
+                    className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                    style={{ 
+                      borderColor: "#EDE9FE",
+                      color: "#1F2937"
+                    }}
+                  >
+                    <option value="">Sin marca</option>
+                    {meta?.marcas.map((marca) => (
+                      <option key={marca.id} value={marca.id}>
+                        {marca.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm" style={{ color: "#6D28D9" }}>Categoría</label>
+                  <select
+                    value={editForm.categoria_id ?? ""}
+                    onChange={(event) => setEditForm((prev) => ({ ...prev, categoria_id: event.target.value ? Number(event.target.value) : undefined }))}
+                    className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                    style={{ 
+                      borderColor: "#EDE9FE",
+                      color: "#1F2937"
+                    }}
+                  >
+                    <option value="">Sin categoría</option>
+                    {meta?.categorias.map((categoria) => (
+                      <option key={categoria.id} value={categoria.id}>
+                        {categoria.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm" style={{ color: "#6D28D9" }}>Descripción</label>
+                <textarea
+                  value={editForm.descripcion ?? ""}
+                  onChange={(event) => setEditForm((prev) => ({ ...prev, descripcion: event.target.value }))}
+                  rows={3}
+                  className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+                  style={{ 
+                    borderColor: "#EDE9FE",
+                    color: "#1F2937"
+                  }}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold" style={{ color: "#6D28D9" }}>Variantes</h3>
+                  <button
+                    type="button"
+                    onClick={handleAddEditVariant}
+                    className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border transition-colors"
+                    style={{ 
+                      borderColor: "#EDE9FE",
+                      backgroundColor: "#FFFFFF",
+                      color: "#8B5CF6"
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#EDE9FE"}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#FFFFFF"}
+                  >
+                    <Plus size={16} /> Variante
                   </button>
                 </div>
-              </form>
-      )}
-            </motion.div>
-  )
+                {editForm.variantes.length === 0 && <p className="text-sm" style={{ color: "#6B7280" }}>No hay variantes registradas.</p>}
+                <div className="space-y-3">
+                  {editForm.variantes.map((variant, index) => {
+                    const markedForDeletion = Boolean(variant.delete)
+                    return (
+                      <div
+                        key={`edit-variant-${variant.id ?? index}`}
+                        className="grid grid-cols-1 md:grid-cols-4 gap-3 border rounded-lg p-4"
+                        style={{ 
+                          borderColor: markedForDeletion ? "#EF4444" : "#EDE9FE",
+                          backgroundColor: markedForDeletion ? "#FEE2E2" : "#EDE9FE40"
+                        }}
+                      >
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs" style={{ color: "#6D28D9" }}>Nombre</label>
+                          <input
+                            value={variant.nombre ?? ""}
+                            onChange={(event) => handleEditVariantChange(index, { nombre: event.target.value })}
+                            disabled={markedForDeletion}
+                            className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none disabled:opacity-60"
+                            style={{ 
+                              borderColor: "#EDE9FE",
+                              color: "#1F2937"
+                            }}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs" style={{ color: "#6D28D9" }}>Unidad</label>
+                          <select
+                            value={variant.unidad_medida_id}
+                            onChange={(event) => handleEditVariantChange(index, { unidad_medida_id: Number(event.target.value) })}
+                            disabled={markedForDeletion}
+                            className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none disabled:opacity-60"
+                            style={{ 
+                              borderColor: "#EDE9FE",
+                              color: "#1F2937"
+                            }}
+                          >
+                            <option value={0}>Seleccionar unidad</option>
+                            {normalizedUnits.map((unit) => (
+                              <option key={unit.id} value={unit.id}>
+                                {unit.nombre}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs" style={{ color: "#6D28D9" }}>Precio</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={variant.precio ?? ""}
+                            onChange={(event) => handleEditVariantChange(index, { precio: event.target.value ? Number(event.target.value) : undefined })}
+                            disabled={markedForDeletion}
+                            className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none disabled:opacity-60"
+                            style={{ 
+                              borderColor: "#EDE9FE",
+                              color: "#1F2937"
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-end justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEditVariant(index)}
+                            className="inline-flex items-center gap-1 text-sm hover:opacity-80 transition-opacity"
+                            style={{ color: markedForDeletion ? "#10B981" : "#EF4444" }}
+                          >
+                            {markedForDeletion ? <RefreshCw size={16} /> : <Trash2 size={16} />}
+                            {markedForDeletion ? "Restaurar" : "Eliminar"}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold" style={{ color: "#6D28D9" }}>Imágenes</h3>
+                  <button
+                    type="button"
+                    onClick={handleAddEditImage}
+                    className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border transition-colors"
+                    style={{ 
+                      borderColor: "#EDE9FE",
+                      backgroundColor: "#FFFFFF",
+                      color: "#8B5CF6"
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#EDE9FE"}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#FFFFFF"}
+                  >
+                    <Plus size={16} /> Imagen
+                  </button>
+                </div>
+                {editForm.imagenes.length === 0 && <p className="text-sm" style={{ color: "#6B7280" }}>Sin imágenes asociadas.</p>}
+                <div className="space-y-3">
+                  {editForm.imagenes.map((image, index) => {
+                    const markedForDeletion = Boolean(image.delete)
+                    return (
+                      <div
+                        key={`edit-image-${image.id ?? index}`}
+                        className="grid grid-cols-1 md:grid-cols-2 gap-3 border rounded-lg p-4"
+                        style={{ 
+                          borderColor: markedForDeletion ? "#EF4444" : "#EDE9FE",
+                          backgroundColor: markedForDeletion ? "#FEE2E2" : "#EDE9FE40"
+                        }}
+                      >
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs" style={{ color: "#6D28D9" }}>URL</label>
+                          <input
+                            value={image.url}
+                            onChange={(event) => handleEditImageChange(index, { url: event.target.value })}
+                            disabled={markedForDeletion}
+                            className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none disabled:opacity-60"
+                            style={{ 
+                              borderColor: "#EDE9FE",
+                              color: "#1F2937"
+                            }}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs" style={{ color: "#6D28D9" }}>Descripción</label>
+                          <input
+                            value={image.descripcion ?? ""}
+                            onChange={(event) => handleEditImageChange(index, { descripcion: event.target.value })}
+                            disabled={markedForDeletion}
+                            className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none disabled:opacity-60"
+                            style={{ 
+                              borderColor: "#EDE9FE",
+                              color: "#1F2937"
+                            }}
+                          />
+                        </div>
+                        <div className="md:col-span-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEditImage(index)}
+                            className="inline-flex items-center gap-1 text-sm hover:opacity-80 transition-opacity"
+                            style={{ color: markedForDeletion ? "#10B981" : "#EF4444" }}
+                          >
+                            {markedForDeletion ? <RefreshCw size={16} /> : <Trash2 size={16} />}
+                            {markedForDeletion ? "Restaurar" : "Eliminar"}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg text-sm text-white transition-colors disabled:opacity-60"
+                  style={{ backgroundColor: "#8B5CF6" }}
+                  onMouseEnter={(e) => !saving && (e.currentTarget.style.backgroundColor = "#6D28D9")}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#8B5CF6"}
+                  disabled={saving}
+                >
+                  Guardar cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </motion.div>
+    )
+  }
 
   const printProductsPDF = async () => {
     setLoading(true)
@@ -1335,17 +1712,366 @@ export default function ProductsPage() {
           </motion.div>
   )
 
+  // Renderizar dashboard de productos
+  const renderDashboard = () => {
+    const PURPLE_COLORS = {
+      primary: "#8B5CF6",
+      secondary: "#A78BFA",
+      light: "#C4B5FD",
+      dark: "#6D28D9",
+      accent: "#EDE9FE",
+    }
+    const WHITE = "#FFFFFF"
+
+    return (
+      <div className="space-y-6 p-6" style={{ backgroundColor: "#F9FAFB" }}>
+        {/* Fila Superior: Widgets Grandes */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Productos por Categoría */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="rounded-xl p-6 shadow-sm bg-white border"
+            style={{ borderColor: PURPLE_COLORS.accent }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold" style={{ color: PURPLE_COLORS.dark }}>
+                Productos por Categoría
+              </h3>
+              <select className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: PURPLE_COLORS.accent }}>
+                <option>Último Mes</option>
+                <option>Último Año</option>
+              </select>
+            </div>
+            <div className="mb-4">
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-2xl font-bold" style={{ color: PURPLE_COLORS.dark }}>
+                  {totalProducts}
+                </span>
+                <span className="text-sm font-semibold" style={{ color: "#10B981" }}>
+                  +12%
+                </span>
+              </div>
+              <p className="text-xs" style={{ color: "#6B7280" }}>
+                Total de productos en el catálogo
+              </p>
+            </div>
+            <ChartContainer
+              config={{
+                value: { color: PURPLE_COLORS.primary },
+              }}
+              className="h-[250px]"
+            >
+              <BarChart data={categoryData.slice(0, 6)}>
+                <CartesianGrid strokeDasharray="3 3" stroke={PURPLE_COLORS.accent} />
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fill: "#6B7280", fontSize: 12 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
+                <YAxis 
+                  tick={{ fill: "#6B7280", fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: WHITE,
+                    border: `1px solid ${PURPLE_COLORS.accent}`,
+                    borderRadius: "8px",
+                  }}
+                />
+                <Bar dataKey="value" fill={PURPLE_COLORS.primary} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </motion.div>
+
+          {/* Distribución por Estado */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="rounded-xl p-6 shadow-sm bg-white border"
+            style={{ borderColor: PURPLE_COLORS.accent }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold" style={{ color: PURPLE_COLORS.dark }}>
+                Estado de Productos
+              </h3>
+            </div>
+            <div className="mb-4">
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-2xl font-bold" style={{ color: PURPLE_COLORS.dark }}>
+                  {activeProducts}
+                </span>
+                <span className="text-sm font-semibold" style={{ color: "#10B981" }}>
+                  Activos
+                </span>
+              </div>
+              <p className="text-xs" style={{ color: "#6B7280" }}>
+                {((activeProducts / totalProducts) * 100).toFixed(1)}% del total
+              </p>
+            </div>
+            <ChartContainer
+              config={{
+                activos: { color: "#10B981" },
+                inactivos: { color: "#EF4444" },
+              }}
+              className="h-[250px]"
+            >
+              <PieChart>
+                <Pie
+                  data={statusData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => {
+                    // Solo mostrar etiqueta si el porcentaje es mayor a 5% para evitar superposiciones
+                    if (percent < 0.05) return ""
+                    return `${name}\n${(percent * 100).toFixed(0)}%`
+                  }}
+                  outerRadius={80}
+                  innerRadius={30}
+                  fill="#8884d8"
+                  dataKey="value"
+                  paddingAngle={2}
+                >
+                  {statusData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: WHITE,
+                    border: `1px solid ${PURPLE_COLORS.accent}`,
+                    borderRadius: "8px",
+                  }}
+                />
+              </PieChart>
+            </ChartContainer>
+          </motion.div>
+        </div>
+
+        {/* Fila Media: KPI Cards - Primera Fila */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard
+            title="Total de Productos"
+            value={totalProducts}
+            subtitle="Cantidad total en catálogo"
+            icon={Boxes}
+            change={{ value: 12.5, label: "vs. período anterior" }}
+            color="success"
+            delay={0.2}
+          />
+          <KPICard
+            title="Productos Activos"
+            value={activeProducts}
+            subtitle="Disponibles para venta"
+            icon={CheckCircle}
+            change={{ value: 8.7, label: "vs. período anterior" }}
+            color="success"
+            delay={0.3}
+          />
+          <KPICard
+            title="Productos Inactivos"
+            value={inactiveProducts}
+            subtitle="Pausados temporalmente"
+            icon={XCircle}
+            color="warning"
+            delay={0.4}
+          />
+          <KPICard
+            title="Total de Variantes"
+            value={totalVariants}
+            subtitle="Variantes disponibles"
+            icon={Tag}
+            change={{ value: 18.3, label: "vs. período anterior" }}
+            color="info"
+            delay={0.5}
+          />
+        </div>
+
+        {/* Segunda Fila de KPIs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard
+            title="Productos con Imágenes"
+            value={`${totalProducts > 0 ? Math.round((productsWithImages / totalProducts) * 100) : 0}%`}
+            subtitle={`${productsWithImages} de ${totalProducts} productos`}
+            icon={ImageIcon}
+            change={{ value: 24.1, label: "vs. período anterior" }}
+            color="success"
+            delay={0.6}
+          />
+          <KPICard
+            title="Productos sin Imágenes"
+            value={totalProducts - productsWithImages}
+            subtitle="Requieren imágenes"
+            icon={ImageIcon}
+            color="warning"
+            delay={0.7}
+          />
+          <KPICard
+            title="Categorías Activas"
+            value={categoryData.length}
+            subtitle="Categorías con productos"
+            icon={Tag}
+            color="info"
+            delay={0.8}
+          />
+          <KPICard
+            title="Tasa de Activos"
+            value={`${totalProducts > 0 ? Math.round((activeProducts / totalProducts) * 100) : 0}%`}
+            subtitle="Productos activos vs. total"
+            icon={TrendingUp}
+            change={{ value: 5.2, label: "vs. período anterior" }}
+            color="success"
+            delay={0.9}
+          />
+        </div>
+
+        {/* Fila Inferior: Tendencias */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+          className="rounded-xl p-6 shadow-sm bg-white border"
+          style={{ borderColor: PURPLE_COLORS.accent }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold" style={{ color: PURPLE_COLORS.dark }}>
+              Tendencias Mensuales
+            </h3>
+            <select className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: PURPLE_COLORS.accent }}>
+              <option>Últimos 6 meses</option>
+              <option>Último año</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-4 mb-4 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PURPLE_COLORS.primary }}></div>
+              <span style={{ color: "#6B7280" }}>Productos</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#3B82F6" }}></div>
+              <span style={{ color: "#6B7280" }}>Variantes</span>
+            </div>
+          </div>
+          <ChartContainer
+            config={{
+              productos: { color: PURPLE_COLORS.primary },
+              variantes: { color: "#3B82F6" },
+            }}
+            className="h-[300px]"
+          >
+            <LineChart data={monthlyTrendData}>
+              <CartesianGrid strokeDasharray="3 3" stroke={PURPLE_COLORS.accent} />
+              <XAxis 
+                dataKey="month" 
+                tick={{ fill: "#6B7280", fontSize: 12 }}
+              />
+              <YAxis 
+                tick={{ fill: "#6B7280", fontSize: 12 }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: WHITE,
+                  border: `1px solid ${PURPLE_COLORS.accent}`,
+                  borderRadius: "8px",
+                }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="productos" 
+                stroke={PURPLE_COLORS.primary} 
+                strokeWidth={2}
+                dot={{ fill: PURPLE_COLORS.primary, r: 4 }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="variantes" 
+                stroke="#3B82F6" 
+                strokeWidth={2}
+                dot={{ fill: "#3B82F6", r: 4 }}
+              />
+            </LineChart>
+          </ChartContainer>
+        </motion.div>
+      </div>
+    )
+  }
+
   const renderContent = () => {
+    // Si no hay acción seleccionada, mostrar el dashboard
+    if (selectedAction === null) {
+      return renderDashboard()
+    }
+    
+    // Si es "list", mostrar la lista principal
+    if (selectedAction === "list") {
+      return renderProductsTable({ showFilters: true, highlightStatus: true, sectionId: "products-section-list" })
+    }
+    
     switch (selectedAction) {
-      case "list":
-        return renderProductsTable({ showFilters: true, highlightStatus: true, sectionId: "products-section-list" })
       case "status":
-        return renderProductsTable({ showFilters: false, highlightStatus: true, sectionId: "products-section-status" })
-      case "search":
-        return renderProductsTable({ showFilters: true, highlightStatus: false, sectionId: "products-section-search" })
+        if (!canManageProducts) {
+          return (
+            <motion.div
+              key="status-section-denied"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl shadow-sm bg-white border p-6" style={{ borderColor: "#EDE9FE" }}>
+              <p className="text-sm" style={{ color: "#EF4444" }}>
+                No tienes permiso para cambiar el estado de productos. Se requiere rol ADMIN.
+              </p>
+            </motion.div>
+          )
+        }
+        return (
+          <motion.div
+            key="status-section"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6"
+          >
+            <div className="rounded-xl shadow-sm bg-white border p-6" style={{ borderColor: "#EDE9FE" }}>
+              <h2 className="text-xl font-semibold mb-2" style={{ color: "#6D28D9" }}>Cambio de Estado de Productos</h2>
+              <p className="text-sm" style={{ color: "#6B7280" }}>
+                Activa o desactiva productos del catálogo. Los productos inactivos no se mostrarán en el ecommerce.
+              </p>
+            </div>
+            {renderProductsTable({ showFilters: true, highlightStatus: true, sectionId: "products-section-status" })}
+          </motion.div>
+        )
       case "create":
+        if (!canManageProducts) {
+          return (
+            <motion.div
+              key="create-section-denied"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl shadow-sm bg-white border p-6" style={{ borderColor: "#EDE9FE" }}>
+              <p className="text-sm" style={{ color: "#EF4444" }}>
+                No tienes permiso para crear productos. Se requiere rol ADMIN.
+              </p>
+            </motion.div>
+          )
+        }
         return renderCreateForm()
       case "edit":
+        if (!canManageProducts) {
+          return (
+            <motion.div
+              key="edit-section-denied"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl shadow-sm bg-white border p-6" style={{ borderColor: "#EDE9FE" }}>
+              <p className="text-sm" style={{ color: "#EF4444" }}>
+                No tienes permiso para editar productos. Se requiere rol ADMIN.
+              </p>
+            </motion.div>
+          )
+        }
         return renderEditForm()
       case "print":
         return (
@@ -1353,10 +2079,11 @@ export default function ProductsPage() {
             key="print-section"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-gray-800 border border-gray-700 rounded-lg p-6 text-white"
+            className="rounded-xl shadow-sm bg-white border p-6"
+            style={{ borderColor: "#EDE9FE" }}
           >
-            <h2 className="text-xl font-semibold mb-4">Imprimir Listado de Productos</h2>
-            <p className="text-sm text-gray-300 mb-6">
+            <h2 className="text-xl font-semibold mb-4" style={{ color: "#6D28D9" }}>Imprimir Listado de Productos</h2>
+            <p className="text-sm mb-6" style={{ color: "#6B7280" }}>
               Se generará un PDF con todos los productos {filters.q || filters.brand_id || filters.category_id || filters.status ? "que coincidan con los filtros actuales" : "disponibles"}.
             </p>
             <button
@@ -1386,6 +2113,13 @@ export default function ProductsPage() {
     }
   }
 
+  // Cargar meta cuando se necesita (create o edit)
+  useEffect(() => {
+    if ((selectedAction === "create" || selectedAction === "edit") && !meta && !metaLoading) {
+      void loadMeta()
+    }
+  }, [selectedAction, meta, metaLoading, loadMeta])
+
   useEffect(() => {
     if (!meta || !meta.unidades || meta.unidades.length === 0) {
       return
@@ -1408,52 +2142,16 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Productos</h1>
-        </div>
-        <button
-          type="button"
-          onClick={() => reloadProducts()}
-          className="inline-flex items-center gap-2 bg-gray-900 border border-gray-700 hover:border-red-500 px-4 py-2 rounded-lg text-sm text-gray-200"
-          disabled={loading}
-        >
-          <RefreshCw size={16} /> Actualizar
-        </button>
+      <div>
+        <h1 className="text-4xl font-bold mb-2" style={{ color: "var(--admin-text-primary)" }}>Productos</h1>
+        <p className="text-sm" style={{ color: "var(--admin-text-secondary)" }}>
+          Gestiona tu catálogo de productos, variantes e inventario
+        </p>
       </div>
 
-      {selectedAction === null ? (
-        <ActionsGrid
-          title="Panel de productos"
-          subtitle="Operaciones disponibles"
-          actions={actions}
-          selectedAction={selectedAction}
-          onSelect={handleActionSelect}
-        />
-      ) : (
-        <div className="flex items-center justify-between bg-gray-800 border border-gray-700 rounded-lg px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-gray-200">
-            <span className="font-semibold">{actions.find((action) => action.id === selectedAction)?.label ?? ""}</span>
-            {metaLoading && (selectedAction === "create" || selectedAction === "edit") && (
-              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedAction(null)
-              setEditingProductId(null)
-            }}
-            className="inline-flex items-center gap-2 rounded-md border border-gray-600 bg-gray-900 px-4 py-2 text-sm font-semibold text-gray-100 hover:border-red-500 hover:bg-gray-800"
-          >
-            <ArrowLeft size={16} /> Volver al menú de acciones
-          </button>
-        </div>
-      )}
-
       {feedback && (
-        <div className="border border-green-700 bg-green-900/20 text-green-200 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
-          <CheckCircle size={16} /> {feedback}
+        <div className="border border-green-600 bg-green-600/90 text-white px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg">
+          <CheckCircle size={16} className="text-white" /> {feedback}
         </div>
       )}
 
@@ -1464,6 +2162,108 @@ export default function ProductsPage() {
       )}
 
       {renderContent()}
+
+      {/* Modal para ver variantes */}
+      <AnimatePresence>
+        {selectedProductForVariants && (
+          <motion.div
+            key="variants-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+            onClick={() => setSelectedProductForVariants(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-2xl rounded-lg border bg-white p-6 shadow-lg"
+              style={{ borderColor: "#EDE9FE" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold" style={{ color: "#6D28D9" }}>
+                    Variantes de: {selectedProductForVariants.nombre}
+                  </h3>
+                  <p className="text-sm" style={{ color: "#6B7280" }}>
+                    {selectedProductForVariants.variantes?.length ?? 0} variante(s) registrada(s)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedProductForVariants(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+
+              {selectedProductForVariants.variantes && selectedProductForVariants.variantes.length > 0 ? (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {selectedProductForVariants.variantes.map((variant, index) => (
+                    <div
+                      key={variant.id ?? index}
+                      className="border rounded-lg p-4"
+                      style={{ borderColor: "#EDE9FE", backgroundColor: "#F9FAFB" }}
+                    >
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="font-semibold" style={{ color: "#6D28D9" }}>Nombre:</span>
+                          <p className="mt-1" style={{ color: "#1F2937" }}>{variant.nombre || "Sin nombre"}</p>
+                        </div>
+                        <div>
+                          <span className="font-semibold" style={{ color: "#6D28D9" }}>Precio:</span>
+                          <p className="mt-1" style={{ color: "#1F2937" }}>
+                            {variant.precio !== undefined && variant.precio !== null
+                              ? new Intl.NumberFormat("es-BO", {
+                                  style: "currency",
+                                  currency: "BOB",
+                                  maximumFractionDigits: 2,
+                                }).format(variant.precio)
+                              : "No definido"}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="font-semibold" style={{ color: "#6D28D9" }}>Unidad de medida:</span>
+                          <p className="mt-1" style={{ color: "#1F2937" }}>
+                            {variant.unidad_medida?.nombre || "No definida"}
+                          </p>
+                        </div>
+                        {variant.id && (
+                          <div>
+                            <span className="font-semibold" style={{ color: "#6D28D9" }}>ID:</span>
+                            <p className="mt-1 font-mono text-xs" style={{ color: "#6B7280" }}>{variant.id}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8" style={{ color: "#6B7280" }}>
+                  <Package size={48} className="mx-auto mb-2 opacity-50" />
+                  <p>Este producto no tiene variantes registradas.</p>
+                </div>
+              )}
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedProductForVariants(null)}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
+                  style={{ backgroundColor: "#8B5CF6" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#6D28D9")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#8B5CF6")}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
