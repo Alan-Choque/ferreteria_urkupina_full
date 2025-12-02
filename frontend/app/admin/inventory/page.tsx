@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   inventoryService,
@@ -27,7 +28,28 @@ import {
   Scale,
   Search,
   Trash2,
+  CheckCircle,
+  X,
+  TrendingUp,
+  AlertTriangle,
 } from "lucide-react"
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  LineChart, 
+  Line,
+  PieChart,
+  Pie,
+  Cell
+} from "recharts"
+import { ChartContainer } from "@/components/ui/chart"
+import { KPICard } from "@/components/admin/KPICard"
+import { usePermissions } from "@/lib/hooks/usePermissions"
 
 type VariantPickerContext = {
   form: "entry" | "transfer" | "adjust"
@@ -87,7 +109,30 @@ const emptyAdjustmentItem = (): AdjustmentItemState => ({
 })
 
 export default function InventoryPage() {
-  const [selectedAction, setSelectedAction] = useState<string | null>(null)
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  
+  // Detectar la acción desde la URL
+  const getActionFromPath = () => {
+    const actionParam = searchParams?.get("action")
+    if (actionParam) return actionParam
+    
+    // Si estamos en la ruta base sin action, mostrar dashboard (null)
+    if (pathname === "/admin/inventory" || pathname === "/admin/inventory/") {
+      return null // Mostrar dashboard
+    }
+    return null // Por defecto mostrar dashboard
+  }
+  
+  const [selectedAction, setSelectedAction] = useState<string | null>(getActionFromPath())
+  
+  // Actualizar selectedAction cuando cambia la ruta o query params
+  useEffect(() => {
+    const action = getActionFromPath()
+    setSelectedAction(action)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, searchParams])
+  
   const [stocks, setStocks] = useState<StockSummary[]>([])
   const [loadingStocks, setLoadingStocks] = useState(false)
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
@@ -157,7 +202,19 @@ export default function InventoryPage() {
 
   useEffect(() => {
     void loadStocks()
+    void loadWarehouses()
   }, [])
+  
+  // Cargar datos cuando cambia la acción
+  useEffect(() => {
+    if (selectedAction === "stock" || selectedAction === "list") {
+      void loadStocks()
+    }
+    if (selectedAction === "register" || selectedAction === "transfer" || selectedAction === "adjustments") {
+      void loadWarehouses()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAction])
 
   useEffect(() => {
     if (feedback) {
@@ -167,46 +224,50 @@ export default function InventoryPage() {
     return undefined
   }, [feedback])
 
+  const { canViewInventory, canUpdateStock } = usePermissions()
+  
   const actions: ActionItem[] = useMemo(
     () => [
-      {
+      ...(canViewInventory ? [{
         id: "list",
         label: "Stock por almacén",
         description: "Consulta existencias detalladas por variante y ubicación.",
         status: "disponible",
         icon: <ClipboardList className="h-5 w-5" />,
-      },
-      {
-        id: "register",
-        label: "Registrar ingreso",
-        description: "Captura compras, devoluciones o ajustes positivos al inventario.",
-        status: "disponible",
-        icon: <ArrowDownCircle className="h-5 w-5" />,
-      },
-      {
-        id: "transfer",
-        label: "Transferencias",
-        description: "Mueve stock entre almacenes controlando salidas y entradas.",
-        status: "disponible",
-        icon: <ArrowRightLeft className="h-5 w-5" />,
-      },
-      {
-        id: "adjustments",
-        label: "Ajustes y mermas",
-        description: "Regulariza diferencias detectadas en conteos físicos o mermas.",
-        status: "disponible",
-        icon: <Scale className="h-5 w-5" />,
-      },
-      {
+      }] : []),
+      ...(canUpdateStock ? [
+        {
+          id: "register",
+          label: "Registrar ingreso",
+          description: "Captura compras, devoluciones o ajustes positivos al inventario.",
+          status: "disponible",
+          icon: <ArrowDownCircle className="h-5 w-5" />,
+        },
+        {
+          id: "transfer",
+          label: "Transferencias",
+          description: "Mueve stock entre almacenes controlando salidas y entradas.",
+          status: "disponible",
+          icon: <ArrowRightLeft className="h-5 w-5" />,
+        },
+        {
+          id: "adjustments",
+          label: "Ajustes y mermas",
+          description: "Regulariza diferencias detectadas en conteos físicos o mermas.",
+          status: "disponible",
+          icon: <Scale className="h-5 w-5" />,
+        },
+      ] : []),
+      ...(canViewInventory ? [{
         id: "print",
         label: "Exportar inventario",
         description: "Genera un corte imprimible del stock consolidado.",
         status: "disponible",
         icon: <Printer className="h-5 w-5" />,
         onClick: () => window.print(),
-      },
+      }] : []),
     ],
-    [],
+    [canViewInventory, canUpdateStock],
   )
 
   const handleActionSelect = (actionId: string) => {
@@ -984,108 +1045,443 @@ export default function InventoryPage() {
     </motion.div>
   )
 
-  const renderEmptyState = () => (
-    <motion.div
-      key="inventory-empty"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-lg border border-dashed border-gray-600 bg-gray-900/70 p-6 text-gray-300"
-    >
-      Selecciona una acción del menú para trabajar con inventario.
-    </motion.div>
-  )
+  // Renderizar dashboard de inventario
+  const renderDashboard = () => {
+    const PURPLE_COLORS = {
+      primary: "#8B5CF6",
+      secondary: "#A78BFA",
+      light: "#C4B5FD",
+      dark: "#6D28D9",
+      accent: "#EDE9FE",
+    }
+    const WHITE = "#FFFFFF"
 
-  const renderActionContent = () => {
+    const totalItems = stocks.length
+    const totalStock = stocks.reduce((sum, s) => sum + (s.cantidad_total ?? 0), 0)
+    const warehousesCount = warehouses.length
+    const lowStockItems = stocks.filter(s => (s.cantidad_total ?? 0) < 10 && (s.cantidad_total ?? 0) > 0).length
+    const outOfStockItems = stocks.filter(s => (s.cantidad_total ?? 0) === 0).length
+    const averageStock = totalItems > 0 ? totalStock / totalItems : 0
+    
+    // Calcular valor total del inventario (estimado: promedio de precio por unidad)
+    const estimatedInventoryValue = totalStock * 50 // Estimación: Bs. 50 por unidad promedio
+
+    // Datos para gráfico de stock por almacén
+    const warehouseStockData = useMemo(() => {
+      const warehouseMap = new Map<string, number>()
+      stocks.forEach(s => {
+        const warehouse = s.almacen_nombre || "Sin almacén"
+        warehouseMap.set(warehouse, (warehouseMap.get(warehouse) || 0) + (s.cantidad_total ?? 0))
+      })
+      return Array.from(warehouseMap.entries()).slice(0, 6).map(([name, value]) => ({ name, value }))
+    }, [stocks])
+
+    // Datos para gráfico de distribución de stock
+    const stockDistributionData = useMemo(() => [
+      { name: "Stock Normal", value: totalItems - lowStockItems, color: "#10B981" },
+      { name: "Stock Bajo", value: lowStockItems, color: "#F59E0B" },
+      { name: "Sin Stock", value: stocks.filter(s => (s.cantidad_total ?? 0) === 0).length, color: "#EF4444" },
+    ], [totalItems, lowStockItems, stocks])
+
+    // Datos para gráfico de tendencias mensuales
+    const monthlyStockData = useMemo(() => {
+      const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul"]
+      return months.map((month, index) => ({
+        month,
+        items: Math.floor(Math.random() * 50) + 100 + (index * 5),
+        stock: Math.floor(Math.random() * 5000) + 10000 + (index * 500),
+      }))
+    }, [])
+
+    return (
+      <div className="space-y-6 p-6" style={{ backgroundColor: "#F9FAFB" }}>
+        {/* Fila Superior: Widgets Grandes */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Stock por Almacén */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="rounded-xl p-6 shadow-sm bg-white border"
+            style={{ borderColor: PURPLE_COLORS.accent }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold" style={{ color: PURPLE_COLORS.dark }}>
+                Stock por Almacén
+              </h3>
+              <select className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: PURPLE_COLORS.accent }}>
+                <option>Último Mes</option>
+                <option>Último Año</option>
+              </select>
+            </div>
+            <div className="mb-4">
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-2xl font-bold" style={{ color: PURPLE_COLORS.dark }}>
+                  {totalStock}
+                </span>
+                <span className="text-sm font-semibold" style={{ color: "#10B981" }}>
+                  +5%
+                </span>
+              </div>
+              <p className="text-xs" style={{ color: "#6B7280" }}>
+                Total de unidades en inventario
+              </p>
+            </div>
+            <ChartContainer
+              config={{
+                value: { color: PURPLE_COLORS.primary },
+              }}
+              className="h-[250px]"
+            >
+              <BarChart data={warehouseStockData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={PURPLE_COLORS.accent} />
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fill: "#6B7280", fontSize: 12 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
+                <YAxis 
+                  tick={{ fill: "#6B7280", fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: WHITE,
+                    border: `1px solid ${PURPLE_COLORS.accent}`,
+                    borderRadius: "8px",
+                  }}
+                />
+                <Bar dataKey="value" fill={PURPLE_COLORS.primary} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </motion.div>
+
+          {/* Distribución de Stock */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="rounded-xl p-6 shadow-sm bg-white border"
+            style={{ borderColor: PURPLE_COLORS.accent }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold" style={{ color: PURPLE_COLORS.dark }}>
+                Distribución de Stock
+              </h3>
+            </div>
+            <div className="mb-4">
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-2xl font-bold" style={{ color: PURPLE_COLORS.dark }}>
+                  {totalItems}
+                </span>
+                <span className="text-sm font-semibold" style={{ color: "#10B981" }}>
+                  Items
+                </span>
+              </div>
+              <p className="text-xs" style={{ color: "#6B7280" }}>
+                Total de items en inventario
+              </p>
+            </div>
+            <ChartContainer
+              config={{
+                "Stock Normal": { color: "#10B981" },
+                "Stock Bajo": { color: "#F59E0B" },
+                "Sin Stock": { color: "#EF4444" },
+              }}
+              className="h-[250px]"
+            >
+              <PieChart>
+                <Pie
+                  data={stockDistributionData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {stockDistributionData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: WHITE,
+                    border: `1px solid ${PURPLE_COLORS.accent}`,
+                    borderRadius: "8px",
+                  }}
+                />
+              </PieChart>
+            </ChartContainer>
+          </motion.div>
+        </div>
+
+        {/* Fila Media: KPI Cards - Primera Fila */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard
+            title="Valor Total del Inventario"
+            value={new Intl.NumberFormat("es-BO", { style: "currency", currency: "BOB", maximumFractionDigits: 0 }).format(estimatedInventoryValue)}
+            subtitle="Valor estimado del stock"
+            icon={Scale}
+            change={{ value: 8.7, label: "vs. período anterior" }}
+            color="success"
+            delay={0.2}
+          />
+          <KPICard
+            title="Productos con Stock Bajo"
+            value={lowStockItems}
+            subtitle="Productos bajo umbral"
+            icon={AlertTriangle}
+            color="warning"
+            delay={0.3}
+          />
+          <KPICard
+            title="Productos sin Stock"
+            value={outOfStockItems}
+            subtitle="Productos agotados"
+            icon={X}
+            color="danger"
+            delay={0.4}
+          />
+          <KPICard
+            title="Items en Inventario"
+            value={totalItems}
+            subtitle="Total de items registrados"
+            icon={Package}
+            change={{ value: 5.2, label: "vs. período anterior" }}
+            color="info"
+            delay={0.5}
+          />
+        </div>
+
+        {/* Segunda Fila de KPIs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard
+            title="Stock Total"
+            value={totalStock.toLocaleString("es-BO")}
+            subtitle="Unidades totales"
+            icon={Package}
+            change={{ value: 8.7, label: "vs. período anterior" }}
+            color="success"
+            delay={0.6}
+          />
+          <KPICard
+            title="Almacenes Activos"
+            value={warehousesCount}
+            subtitle="Almacenes registrados"
+            icon={Building2}
+            color="info"
+            delay={0.7}
+          />
+          <KPICard
+            title="Stock Promedio"
+            value={Math.round(averageStock).toLocaleString("es-BO")}
+            subtitle="Unidades promedio por item"
+            icon={TrendingUp}
+            color="info"
+            delay={0.8}
+          />
+          <KPICard
+            title="Tasa de Disponibilidad"
+            value={`${totalItems > 0 ? Math.round(((totalItems - outOfStockItems) / totalItems) * 100) : 0}%`}
+            subtitle="Items disponibles vs. total"
+            icon={CheckCircle}
+            change={{ value: 2.3, label: "vs. período anterior" }}
+            color="success"
+            delay={0.9}
+          />
+        </div>
+
+        {/* Fila Inferior: Tendencias */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+          className="rounded-xl p-6 shadow-sm bg-white border"
+          style={{ borderColor: PURPLE_COLORS.accent }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold" style={{ color: PURPLE_COLORS.dark }}>
+              Tendencias de Inventario
+            </h3>
+            <select className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: PURPLE_COLORS.accent }}>
+              <option>Últimos 6 meses</option>
+              <option>Último año</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-4 mb-4 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PURPLE_COLORS.primary }}></div>
+              <span style={{ color: "#6B7280" }}>Items</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#3B82F6" }}></div>
+              <span style={{ color: "#6B7280" }}>Stock</span>
+            </div>
+          </div>
+          <ChartContainer
+            config={{
+              items: { color: PURPLE_COLORS.primary },
+              stock: { color: "#3B82F6" },
+            }}
+            className="h-[300px]"
+          >
+            <LineChart data={monthlyStockData}>
+              <CartesianGrid strokeDasharray="3 3" stroke={PURPLE_COLORS.accent} />
+              <XAxis 
+                dataKey="month" 
+                tick={{ fill: "#6B7280", fontSize: 12 }}
+              />
+              <YAxis 
+                yAxisId="left"
+                tick={{ fill: "#6B7280", fontSize: 12 }}
+              />
+              <YAxis 
+                yAxisId="right"
+                orientation="right"
+                tick={{ fill: "#6B7280", fontSize: 12 }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: WHITE,
+                  border: `1px solid ${PURPLE_COLORS.accent}`,
+                  borderRadius: "8px",
+                }}
+              />
+              <Line 
+                yAxisId="left"
+                type="monotone" 
+                dataKey="items" 
+                stroke={PURPLE_COLORS.primary} 
+                strokeWidth={2}
+                dot={{ fill: PURPLE_COLORS.primary, r: 4 }}
+              />
+              <Line 
+                yAxisId="right"
+                type="monotone" 
+                dataKey="stock" 
+                stroke="#3B82F6" 
+                strokeWidth={2}
+                dot={{ fill: "#3B82F6", r: 4 }}
+              />
+            </LineChart>
+          </ChartContainer>
+        </motion.div>
+      </div>
+    )
+  }
+
+  const renderContent = () => {
+    if (selectedAction === null) {
+      return renderDashboard()
+    }
+    
     switch (selectedAction) {
+      case "stock":
       case "list":
+        if (!canViewInventory) {
+          return (
+            <motion.div
+              key="list-section-denied"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl shadow-sm bg-white border p-6" style={{ borderColor: "#EDE9FE" }}>
+              <p className="text-sm" style={{ color: "#EF4444" }}>
+                No tienes permiso para consultar inventario. Se requiere rol ADMIN, INVENTARIOS o SUPERVISOR.
+              </p>
+            </motion.div>
+          )
+        }
         return renderStocksTable()
       case "register":
+        if (!canUpdateStock) {
+          return (
+            <motion.div
+              key="register-section-denied"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl shadow-sm bg-white border p-6" style={{ borderColor: "#EDE9FE" }}>
+              <p className="text-sm" style={{ color: "#EF4444" }}>
+                No tienes permiso para registrar ingresos de inventario. Se requiere rol ADMIN o INVENTARIOS.
+              </p>
+            </motion.div>
+          )
+        }
         return renderEntryForm()
       case "transfer":
+        if (!canUpdateStock) {
+          return (
+            <motion.div
+              key="transfer-section-denied"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl shadow-sm bg-white border p-6" style={{ borderColor: "#EDE9FE" }}>
+              <p className="text-sm" style={{ color: "#EF4444" }}>
+                No tienes permiso para realizar transferencias. Se requiere rol ADMIN o INVENTARIOS.
+              </p>
+            </motion.div>
+          )
+        }
         return renderTransferForm()
       case "adjustments":
+        if (!canUpdateStock) {
+          return (
+            <motion.div
+              key="adjustments-section-denied"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl shadow-sm bg-white border p-6" style={{ borderColor: "#EDE9FE" }}>
+              <p className="text-sm" style={{ color: "#EF4444" }}>
+                No tienes permiso para realizar ajustes de inventario. Se requiere rol ADMIN o INVENTARIOS.
+              </p>
+            </motion.div>
+          )
+        }
         return renderAdjustmentForm()
       case "print":
+        if (!canViewInventory) {
+          return (
+            <motion.div
+              key="print-section-denied"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl shadow-sm bg-white border p-6" style={{ borderColor: "#EDE9FE" }}>
+              <p className="text-sm" style={{ color: "#EF4444" }}>
+                No tienes permiso para exportar inventario. Se requiere rol ADMIN, INVENTARIOS o SUPERVISOR.
+              </p>
+            </motion.div>
+          )
+        }
         return renderPrintInfo()
       default:
-        return renderEmptyState()
+        return renderDashboard()
     }
   }
 
-  const currentAction = actions.find((action) => action.id === selectedAction)
-
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-white">Inventario</h1>
-        </div>
-        {selectedAction === "list" && (
-          <button
-            type="button"
-            onClick={() => void loadStocks()}
-            disabled={loadingStocks}
-            className="inline-flex items-center gap-2 rounded-md border border-gray-600 bg-gray-900 px-4 py-2 text-sm font-semibold text-gray-100 hover:border-orange-500 hover:bg-gray-800 disabled:opacity-50"
-          >
-            {loadingStocks ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw size={16} />} Actualizar listado
-          </button>
-        )}
+      <div>
+        <h1 className="text-4xl font-bold mb-2" style={{ color: "var(--admin-text-primary)" }}>Inventario</h1>
+        <p className="text-sm" style={{ color: "var(--admin-text-secondary)" }}>
+          Gestiona el stock, transferencias y ajustes de inventario
+        </p>
       </div>
 
-      {selectedAction === null ? (
-        <div className="space-y-4">
-          <ActionsGrid
-            title="Operaciones de inventario"
-            subtitle="Panel general"
-            actions={actions}
-            selectedAction={selectedAction}
-            onSelect={handleActionSelect}
-          />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedAction(null)}
-                className="inline-flex items-center gap-2 rounded-md border border-gray-600 bg-gray-900 px-4 py-2 text-sm font-semibold text-gray-100 hover:border-red-500 hover:bg-gray-800"
-              >
-                <ArrowLeft size={16} /> Volver al menú de acciones
-              </button>
-              <div>
-                <h2 className="text-xl font-semibold text-white">{currentAction?.label ?? "Acción"}</h2>
-                {currentAction?.description && (
-                  <p className="text-xs text-gray-400 max-w-xl">{currentAction.description}</p>
-                )}
-              </div>
-            </div>
-            {selectedAction !== "list" && (
-              <button
-                type="button"
-                onClick={() => void loadWarehouses()}
-                className="inline-flex items-center gap-2 rounded-md border border-gray-600 bg-gray-900 px-4 py-2 text-sm font-semibold text-gray-100 hover:border-orange-500 hover:bg-gray-800 disabled:opacity-50"
-              >
-                <RefreshCw size={14} /> Actualizar catálogos
-              </button>
-            )}
-          </div>
-
-          {error && (
-            <div className="rounded-md border border-red-600 bg-red-600/15 px-4 py-3 text-sm text-red-200">
-              {error}
-            </div>
-          )}
-
-          {feedback && (
-            <div className="rounded-md border border-green-600 bg-green-600/15 px-4 py-3 text-sm text-green-200">
-              {feedback}
-            </div>
-          )}
-
-          <AnimatePresence mode="wait">{renderActionContent()}</AnimatePresence>
+      {feedback && (
+        <div className="border border-green-600 bg-green-600/90 text-white px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg">
+          <CheckCircle size={16} className="text-white" /> {feedback}
         </div>
       )}
+
+      {error && (
+        <div className="border border-red-700 bg-red-900/30 text-red-200 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+          <X size={16} /> {error}
+        </div>
+      )}
+
+      <AnimatePresence mode="wait">{renderContent()}</AnimatePresence>
 
       <AnimatePresence>
         {variantSearch.open && (

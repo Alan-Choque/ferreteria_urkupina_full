@@ -4,10 +4,10 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { CartProvider } from "@/lib/contexts/cart-context"
+import { WishlistProvider } from "@/lib/contexts/wishlist-context"
 import { ToastProvider } from "@/lib/contexts/toast-context"
 import { ToastContainer } from "@/components/toast-container"
-import Header from "@/components/header"
-import FooterFerretek from "@/components/footer-ferretek"
+import LayoutWrapper from "@/components/layout-wrapper"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -27,13 +27,13 @@ export default function RootLayout({
     <html lang="es">
       <body className={`font-sans antialiased`}>
         <CartProvider>
-          <ToastProvider>
-            <Header />
-            {children}
-            <FooterFerretek />
-            <ToastContainer />
-            <Analytics />
-          </ToastProvider>
+          <WishlistProvider>
+            <ToastProvider>
+              <LayoutWrapper>{children}</LayoutWrapper>
+              <ToastContainer />
+              <Analytics />
+            </ToastProvider>
+          </WishlistProvider>
         </CartProvider>
       </body>
     </html>

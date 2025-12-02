@@ -14,32 +14,27 @@ export default async function ProductDetailPage({ params, searchParams }: PagePr
 
   let product = null
 
-  // Validar que el slug no sea "undefined" o inválido
-  if (!slug || slug === "undefined" || slug === "null" || slug.trim() === "") {
-    // Si tenemos un ID de fallback, usarlo directamente
-    if (fallbackId) {
-      try {
-        const id = typeof fallbackId === "string" ? parseInt(fallbackId, 10) : Number(fallbackId)
-        if (!isNaN(id) && id > 0) {
-          product = await productsService.getProductById(id)
-        }
-      } catch {}
+  // Si el slug es un número, intentar primero como ID (caso común: /producto/1805)
+  if (slug && !isNaN(Number(slug))) {
+    try {
+      const id = Number(slug)
+      if (id > 0) {
+        product = await productsService.getProductById(id)
+      }
+    } catch (idError) {
+      console.error("Error loading product by ID:", idError)
     }
-    
-    if (!product) {
-      notFound()
-    }
-  } else {
-    // Priorizar slug (método principal) solo si es válido
-    
-    // Intentar primero con el slug tal cual viene
+  }
+
+  // Si no se encontró por ID y el slug no es numérico, intentar como slug
+  if (!product && slug && slug !== "undefined" && slug !== "null" && slug.trim() !== "") {
     try {
       product = await productsService.getProductBySlug(slug)
     } catch (slugError: any) {
       const status = slugError?.status
       
-      // Intentar búsqueda aproximada por texto si 404
-      if (status === 404 && !product) {
+      // Si es 404, intentar búsqueda aproximada por texto
+      if (status === 404) {
         try {
           const query = slug.replace(/-/g, " ")
           const list = await productsService.listProducts({ q: query, page: 1, page_size: 1 })
@@ -47,25 +42,22 @@ export default async function ProductDetailPage({ params, searchParams }: PagePr
           if (candidate?.id) {
             product = await productsService.getProductById(candidate.id)
           }
-        } catch {}
+        } catch (searchError) {
+          console.error("Error in product search:", searchError)
+        }
       }
-      
-      // Si el slug es un número, intentar como ID
-      if (!isNaN(Number(slug))) {
-        try {
-          product = await productsService.getProductById(Number(slug))
-        } catch {}
+    }
+  }
+
+  // Si aún no se encontró y tenemos un ID de fallback en los parámetros
+  if (!product && fallbackId) {
+    try {
+      const id = typeof fallbackId === "string" ? parseInt(fallbackId, 10) : Number(fallbackId)
+      if (!isNaN(id) && id > 0) {
+        product = await productsService.getProductById(id)
       }
-      
-      // Si aún no se encontró y tenemos un ID en los parámetros, intentar con ese ID
-      if (!product && fallbackId) {
-        try {
-          const id = typeof fallbackId === "string" ? parseInt(fallbackId, 10) : Number(fallbackId)
-          if (!isNaN(id) && id > 0) {
-            product = await productsService.getProductById(id)
-          }
-        } catch {}
-      }
+    } catch (fallbackError) {
+      console.error("Error loading product by fallback ID:", fallbackError)
     }
   }
 

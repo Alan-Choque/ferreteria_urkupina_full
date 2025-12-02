@@ -124,25 +124,26 @@
   }
 }
 
-/* Admin Theme Palettes */
-[data-admin-theme="steel"] {
-  --admin-primary: #1f4d7a;
-  --admin-primary-light: #2e5fa8;
-  --admin-primary-dark: #153560;
-  --admin-accent: #f5c518;
-  --admin-accent-light: #ffd650;
-  --admin-accent-dark: #d4a200;
-  --admin-surface-light: #f5f7fa;
-  --admin-surface-medium: #eef2f6;
-  --admin-surface-dark: #e5e7eb;
-  --admin-text-primary: #0f172a;
-  --admin-text-secondary: #475569;
-  --admin-text-tertiary: #94a3b8;
-  --admin-border: #e5e7eb;
-  --admin-success: #10b981;
-  --admin-warning: #f59e0b;
-  --admin-error: #ef4444;
-  --admin-bg: #ffffff;
+/* Admin Theme Palettes - CRM Purple & White */
+[data-admin-theme="steel"],
+[data-admin-theme="crm"] {
+  --admin-primary: #8B5CF6;
+  --admin-primary-light: #A78BFA;
+  --admin-primary-dark: #6D28D9;
+  --admin-accent: #C4B5FD;
+  --admin-accent-light: #EDE9FE;
+  --admin-accent-dark: #9333EA;
+  --admin-surface-light: #FFFFFF;
+  --admin-surface-medium: #F9FAFB;
+  --admin-surface-dark: #F3F4F6;
+  --admin-text-primary: #1F2937;
+  --admin-text-secondary: #6B7280;
+  --admin-text-tertiary: #9CA3AF;
+  --admin-border: #E5E7EB;
+  --admin-success: #10B981;
+  --admin-warning: #F59E0B;
+  --admin-error: #EF4444;
+  --admin-bg: #FFFFFF;
 }
 
 [data-admin-theme="graphite"] {
@@ -186,23 +187,23 @@
 }
 
 html {
-  --admin-primary: #1f4d7a;
-  --admin-primary-light: #2e5fa8;
-  --admin-primary-dark: #153560;
-  --admin-accent: #f5c518;
-  --admin-accent-light: #ffd650;
-  --admin-accent-dark: #d4a200;
-  --admin-surface-light: #f5f7fa;
-  --admin-surface-medium: #eef2f6;
-  --admin-surface-dark: #e5e7eb;
-  --admin-text-primary: #0f172a;
-  --admin-text-secondary: #475569;
-  --admin-text-tertiary: #94a3b8;
-  --admin-border: #e5e7eb;
-  --admin-success: #10b981;
-  --admin-warning: #f59e0b;
-  --admin-error: #ef4444;
-  --admin-bg: #ffffff;
+  --admin-primary: #8B5CF6;
+  --admin-primary-light: #A78BFA;
+  --admin-primary-dark: #6D28D9;
+  --admin-accent: #C4B5FD;
+  --admin-accent-light: #EDE9FE;
+  --admin-accent-dark: #9333EA;
+  --admin-surface-light: #FFFFFF;
+  --admin-surface-medium: #F9FAFB;
+  --admin-surface-dark: #F3F4F6;
+  --admin-text-primary: #1F2937;
+  --admin-text-secondary: #6B7280;
+  --admin-text-tertiary: #9CA3AF;
+  --admin-border: #E5E7EB;
+  --admin-success: #10B981;
+  --admin-warning: #F59E0B;
+  --admin-error: #EF4444;
+  --admin-bg: #FFFFFF;
 
   /* Storefront Theme Palettes - Steel & Safety Yellow (DEFAULT) */
   --storefront-brand: #1f4d7a;

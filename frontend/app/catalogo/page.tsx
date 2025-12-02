@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { ChevronUp } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { ChevronUp, ChevronDown, Check } from "lucide-react";
 import { productsService, type ProductListItem } from "@/lib/services/products-service";
 import { categoriesService } from "@/lib/services/categories-service";
 import { LoadingState, ErrorState, ProductSkeleton } from "@/components/api-boundary";
 import { useCart } from "@/hooks/use-cart";
+import { useWishlist } from "@/lib/contexts/wishlist-context";
 import { useToast } from "@/lib/contexts/toast-context";
+import { Heart } from "lucide-react";
 
 interface Filters {
   search: string;
@@ -42,8 +44,10 @@ const slugifyName = (name?: string | null) => {
 
 export default function CatalogPage() {
   const { add } = useCart()
+  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist()
   const { showToast } = useToast()
   const searchParams = useSearchParams()
+  const router = useRouter()
   
   // Leer parámetro de búsqueda de la URL
   const initialSearch = searchParams.get("q") || ""
@@ -77,19 +81,41 @@ export default function CatalogPage() {
         setAllCategories(cats);
       } catch (err) {
         console.error("Error loading categories:", err);
+        // Si falla, dejar el array vacío para que la página siga funcionando
+        setAllCategories([]);
       }
     };
     loadCategories();
   }, []);
 
-  // Cargar todos los productos una vez para contar por categoría
+  // Cargar todos los productos una vez para contar por categoría y obtener todas las marcas
   useEffect(() => {
     const loadAllProducts = async () => {
       try {
-        const data = await productsService.listProducts({ page: 1, page_size: 200 });
-        setAllProductsForCount(data.items.map((item) => ({ ...item, name: item.nombre })));
+        // Cargar más productos para obtener todas las marcas disponibles
+        // Hacer múltiples peticiones si es necesario
+        let allItems: ProductListItem[] = [];
+        let currentPage = 1;
+        const pageSize = 200;
+        let hasMore = true;
+
+        while (hasMore && currentPage <= 5) { // Limitar a 5 páginas (1000 productos máximo)
+          const data = await productsService.listProducts({ page: currentPage, page_size: pageSize });
+          allItems = [...allItems, ...data.items.map((item) => ({ ...item, name: item.nombre }))];
+          
+          // Si hay menos productos que el page_size, no hay más páginas
+          if (data.items.length < pageSize || allItems.length >= data.total) {
+            hasMore = false;
+          } else {
+            currentPage++;
+          }
+        }
+        
+        setAllProductsForCount(allItems);
       } catch (err) {
         console.error("Error loading all products for count:", err);
+        // Si falla, dejar el array vacío para que la página siga funcionando
+        setAllProductsForCount([]);
       }
     };
     loadAllProducts();
@@ -99,6 +125,11 @@ export default function CatalogPage() {
   const [sortBy, setSortBy] = useState("newest");
   const [page, setPage] = useState(1);
   const [pageSize] = useState(12);
+  const [categoriesExpanded, setCategoriesExpanded] = useState(true);
+  const [brandsExpanded, setBrandsExpanded] = useState(true);
+  const [availabilityExpanded, setAvailabilityExpanded] = useState(true);
+  const [brandsDropdownOpen, setBrandsDropdownOpen] = useState(false);
+  const [availabilityDropdownOpen, setAvailabilityDropdownOpen] = useState(false);
 
   // Estado de datos
   const [products, setProducts] = useState<ProductListItem[]>([]);
@@ -138,8 +169,17 @@ export default function CatalogPage() {
       setProducts(data.items.map((item) => ({ ...item, name: item.nombre })));
       setTotal(data.total);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error("Error desconocido"));
+      const errorMessage = err instanceof Error ? err.message : "Error desconocido";
+      // Si es un error 500, mostrar mensaje más amigable
+      if ((err as any)?.status === 500) {
+        setError(new Error("Error al conectar con el servidor. Por favor, intenta más tarde."));
+      } else {
+        setError(err instanceof Error ? err : new Error(errorMessage));
+      }
       console.error("Error loading products:", err);
+      // En caso de error, dejar arrays vacíos para que la página siga funcionando
+      setProducts([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -215,19 +255,29 @@ export default function CatalogPage() {
     return result;
   }, [products, filters.categories, filters.priceMin, filters.priceMax, filters.availability, sortBy]);
 
-  // Get unique brands and categories from products
+  // Get unique brands from all products loaded (including allProductsForCount for more brands)
   const brands = useMemo(() => {
     const brandMap = new Map<number, string>();
+    // Usar allProductsForCount para obtener todas las marcas disponibles
+    allProductsForCount.forEach((p) => {
+      if (p.marca?.id && p.marca?.nombre) {
+        brandMap.set(p.marca.id, p.marca.nombre);
+      }
+    });
+    // También agregar marcas de productos actuales por si acaso
     products.forEach((p) => {
       if (p.marca?.id && p.marca?.nombre) {
         brandMap.set(p.marca.id, p.marca.nombre);
       }
     });
-    return Array.from(brandMap.entries()).map(([id, nombre]) => ({
-      value: String(id),
-      label: nombre,
-    }));
-  }, [products]);
+    // Ordenar alfabéticamente
+    return Array.from(brandMap.entries())
+      .map(([id, nombre]) => ({
+        value: String(id),
+        label: nombre,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [products, allProductsForCount]);
 
   const categories = useMemo(() => {
     const catMap = new Map<number, string>();
@@ -245,7 +295,8 @@ export default function CatalogPage() {
     ];
   }, [products]);
 
-  const maxPage = Math.ceil(total / pageSize);
+  // Calcular el número máximo de páginas basado en el total real de productos
+  const maxPage = Math.max(1, Math.ceil(total / pageSize));
 
   if (loading && products.length === 0) {
     return (
@@ -261,7 +312,21 @@ export default function CatalogPage() {
   if (error) {
     return (
       <main className="min-h-screen bg-white">
-        <ErrorState error={error} />
+        <div className="max-w-4xl mx-auto px-4 py-12">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <h2 className="text-xl font-bold text-red-900 mb-2">Error al cargar el catálogo</h2>
+            <p className="text-red-700 mb-4">{error.message}</p>
+            <button
+              onClick={() => {
+                setError(null);
+                loadProducts();
+              }}
+              className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Intentar de nuevo
+            </button>
+          </div>
+        </div>
       </main>
     );
   }
@@ -289,11 +354,19 @@ export default function CatalogPage() {
 
                 {/* Category Filter - Checkboxes */}
                 <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="block text-sm font-bold text-neutral-900">Categoría</label>
-                    <ChevronUp className="w-4 h-4 text-neutral-600" />
-                  </div>
-                  <div className="space-y-1 border border-neutral-200 rounded-lg p-3 bg-white">
+                  <button
+                    onClick={() => setCategoriesExpanded(!categoriesExpanded)}
+                    className="flex items-center justify-between w-full mb-3 hover:opacity-80 transition-opacity"
+                  >
+                    <label className="block text-sm font-bold text-neutral-900 cursor-pointer">Categoría</label>
+                    {categoriesExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-neutral-600" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-neutral-600" />
+                    )}
+                  </button>
+                  {categoriesExpanded && (
+                    <div className="space-y-1 border border-neutral-200 rounded-lg p-3 bg-white">
                     {allCategories.length === 0 ? (
                       <p className="text-sm text-neutral-500">Cargando categorías...</p>
                     ) : (
@@ -337,8 +410,9 @@ export default function CatalogPage() {
                         );
                       })
                     )}
-                  </div>
-                  {filters.categories.length > 0 && (
+                    </div>
+                  )}
+                  {filters.categories.length > 0 && categoriesExpanded && (
                     <button
                       onClick={() => {
                         setFilters((prev) => ({ ...prev, categories: [] }));
@@ -351,24 +425,74 @@ export default function CatalogPage() {
                   )}
                 </div>
 
-                {/* Brand Filter */}
+                {/* Brand Filter - Desplegable */}
                 <div>
-                  <label className="block text-sm font-bold text-neutral-900 mb-3">Marca</label>
-                  <select
-                    value={filters.brand}
-                    onChange={(e) => {
-                      setFilters((prev) => ({ ...prev, brand: e.target.value }));
-                      setPage(1);
-                    }}
-                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-600"
+                  <button
+                    onClick={() => setBrandsExpanded(!brandsExpanded)}
+                    className="flex items-center justify-between w-full mb-3 hover:opacity-80 transition-opacity"
                   >
-                    <option value="all">Todas</option>
-                    {brands.map((brand) => (
-                      <option key={brand.value} value={brand.value}>
-                        {brand.label}
-                      </option>
-                    ))}
-                  </select>
+                    <label className="block text-sm font-bold text-neutral-900 cursor-pointer">Marca</label>
+                    {brandsExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-neutral-600" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-neutral-600" />
+                    )}
+                  </button>
+                  {brandsExpanded && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setBrandsDropdownOpen(!brandsDropdownOpen)}
+                        className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-600 text-left flex items-center justify-between bg-white"
+                      >
+                        <span className="text-neutral-700">
+                          {filters.brand === "all" ? "Todas" : brands.find(b => b.value === filters.brand)?.label || "Todas"}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-neutral-600 transition-transform ${brandsDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {brandsDropdownOpen && (
+                        <>
+                          <div 
+                            className="fixed inset-0 z-10" 
+                            onClick={() => setBrandsDropdownOpen(false)}
+                          />
+                          <div className="absolute z-20 w-full mt-1 bg-white border border-neutral-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFilters((prev) => ({ ...prev, brand: "all" }));
+                                setPage(1);
+                                setBrandsDropdownOpen(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-neutral-100 flex items-center justify-between ${
+                                filters.brand === "all" ? "bg-orange-50 text-orange-600" : "text-neutral-700"
+                              }`}
+                            >
+                              <span>Todas</span>
+                              {filters.brand === "all" && <Check className="w-4 h-4" />}
+                            </button>
+                            {brands.map((brand) => (
+                              <button
+                                key={brand.value}
+                                type="button"
+                                onClick={() => {
+                                  setFilters((prev) => ({ ...prev, brand: brand.value }));
+                                  setPage(1);
+                                  setBrandsDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left hover:bg-neutral-100 flex items-center justify-between ${
+                                  filters.brand === brand.value ? "bg-orange-50 text-orange-600" : "text-neutral-700"
+                                }`}
+                              >
+                                <span>{brand.label}</span>
+                                {filters.brand === brand.value && <Check className="w-4 h-4" />}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Price Range */}
@@ -405,20 +529,83 @@ export default function CatalogPage() {
                   </p>
                 </div>
 
-                {/* Availability Filter */}
+                {/* Availability Filter - Desplegable */}
                 <div>
-                  <label className="block text-sm font-bold text-neutral-900 mb-3">Disponibilidad</label>
-                  <select
-                    value={filters.availability}
-                    onChange={(e) => {
-                      setFilters((prev) => ({ ...prev, availability: e.target.value }));
-                    }}
-                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-600"
+                  <button
+                    onClick={() => setAvailabilityExpanded(!availabilityExpanded)}
+                    className="flex items-center justify-between w-full mb-3 hover:opacity-80 transition-opacity"
                   >
-                    <option value="all">Todas</option>
-                    <option value="available">Disponibles</option>
-                    <option value="unavailable">No Disponibles</option>
-                  </select>
+                    <label className="block text-sm font-bold text-neutral-900 cursor-pointer">Disponibilidad</label>
+                    {availabilityExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-neutral-600" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-neutral-600" />
+                    )}
+                  </button>
+                  {availabilityExpanded && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setAvailabilityDropdownOpen(!availabilityDropdownOpen)}
+                        className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-600 text-left flex items-center justify-between bg-white"
+                      >
+                        <span className="text-neutral-700">
+                          {filters.availability === "all" ? "Todas" : 
+                           filters.availability === "available" ? "Disponibles" : "No Disponibles"}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-neutral-600 transition-transform ${availabilityDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {availabilityDropdownOpen && (
+                        <>
+                          <div 
+                            className="fixed inset-0 z-10" 
+                            onClick={() => setAvailabilityDropdownOpen(false)}
+                          />
+                          <div className="absolute z-20 w-full mt-1 bg-white border border-neutral-300 rounded-lg shadow-lg">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFilters((prev) => ({ ...prev, availability: "all" }));
+                                setAvailabilityDropdownOpen(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-neutral-100 flex items-center justify-between ${
+                                filters.availability === "all" ? "bg-orange-50 text-orange-600" : "text-neutral-700"
+                              }`}
+                            >
+                              <span>Todas</span>
+                              {filters.availability === "all" && <Check className="w-4 h-4" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFilters((prev) => ({ ...prev, availability: "available" }));
+                                setAvailabilityDropdownOpen(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-neutral-100 flex items-center justify-between ${
+                                filters.availability === "available" ? "bg-orange-50 text-orange-600" : "text-neutral-700"
+                              }`}
+                            >
+                              <span>Disponibles</span>
+                              {filters.availability === "available" && <Check className="w-4 h-4" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFilters((prev) => ({ ...prev, availability: "unavailable" }));
+                                setAvailabilityDropdownOpen(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-neutral-100 flex items-center justify-between ${
+                                filters.availability === "unavailable" ? "bg-orange-50 text-orange-600" : "text-neutral-700"
+                              }`}
+                            >
+                              <span>No Disponibles</span>
+                              {filters.availability === "unavailable" && <Check className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Clear Filters */}
@@ -447,12 +634,21 @@ export default function CatalogPage() {
               {/* Top Bar */}
               <div className="flex justify-between items-center mb-6 pb-4 border-b border-neutral-200">
                 <div className="text-sm text-neutral-600">
-                  Mostrando <strong>{filteredProducts.length}</strong> de <strong>{filteredProducts.length === products.length ? total : filteredProducts.length}</strong> productos
-                  {filteredProducts.length !== products.length && (
-                    <span className="text-xs text-neutral-500 ml-2">
-                      (de {products.length} cargados)
-                    </span>
-                  )}
+                  {(() => {
+                    const start = (page - 1) * pageSize + 1
+                    const end = Math.min(page * pageSize, total)
+                    const showing = filteredProducts.length
+                    return (
+                      <>
+                        Mostrando <strong>{start}-{end}</strong> de <strong>{total}</strong> productos
+                        {showing !== (end - start + 1) && (
+                          <span className="text-xs text-neutral-500 ml-2">
+                            ({showing} visibles después de filtros)
+                          </span>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
 
                 <div className="flex gap-4 items-center">
@@ -554,8 +750,8 @@ export default function CatalogPage() {
                       return null;
                     }
 
-                    // Fallback definitivo: navegar por ID garantiza que el backend encuentre el producto
-                    const productHref = `/producto/${product.id}`;
+                    // Usar slug si está disponible, de lo contrario usar ID como fallback
+                    const productHref = productSlug ? `/producto/${productSlug}` : `/producto/${product.id}?id=${product.id}`;
                     // Calcular descuento: todos los productos tienen un 20% de descuento simulado
                     // TODO: En el futuro, obtener descuentos reales desde promociones activas en la BD
                     const originalPrice = productPrice * 1.25; // Precio original = precio actual + 25% (20% descuento)
@@ -610,6 +806,10 @@ export default function CatalogPage() {
                           <button
                             onClick={(e) => {
                               e.preventDefault()
+                              // No requiere autenticación para agregar al carrito
+                              // El carrito funciona sin cuenta (se guarda en localStorage)
+                              // Solo se requiere autenticación al finalizar la compra (checkout)
+                              
                               const variant = product.variantes?.[0]
                               if (variant) {
                                 add({
@@ -719,30 +919,58 @@ export default function CatalogPage() {
                               </span>
                             )}
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault()
-                              const variant = product.variantes?.[0]
-                              if (variant) {
-                                add({
-                                  id: product.id,
-                                  sku: product.sku || String(product.id),
-                                  slug: productSlug,
-                                  name: productName,
-                                  price: productPrice,
-                                  image: productImage,
-                                  variantId: variant.id.toString(),
-                                  variantSku: String(variant.id),
-                                  variantName: variant.nombre || "Variante",
-                                  variantPrice: variant.precio ?? 0,
-                                }, 1)
-                                showToast(`Producto "${productName}" se agregó al carrito`, "success")
-                              }
-                            }}
-                            className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded-lg transition-colors text-sm"
-                          >
-                            AÑADIR AL CARRO
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                // No requiere autenticación para agregar al carrito
+                                // El carrito funciona sin cuenta (se guarda en localStorage)
+                                // Solo se requiere autenticación al finalizar la compra (checkout)
+                                
+                                const variant = product.variantes?.[0]
+                                if (variant) {
+                                  add({
+                                    id: product.id,
+                                    sku: product.sku || String(product.id),
+                                    slug: productSlug,
+                                    name: productName,
+                                    price: productPrice,
+                                    image: productImage,
+                                    variantId: variant.id.toString(),
+                                    variantSku: String(variant.id),
+                                    variantName: variant.nombre || "Variante",
+                                    variantPrice: variant.precio ?? 0,
+                                  }, 1)
+                                  showToast(`Producto "${productName}" se agregó al carrito`, "success")
+                                }
+                              }}
+                              className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded-lg transition-colors text-sm"
+                            >
+                              AÑADIR AL CARRO
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                if (isInWishlist(product.id)) {
+                                  removeFromWishlist(product.id)
+                                  showToast("Producto eliminado de tu lista de deseos", "info")
+                                } else {
+                                  addToWishlist(product)
+                                  showToast("Producto agregado a tu lista de deseos", "success")
+                                }
+                              }}
+                              className={`p-2 rounded-lg border-2 transition-colors ${
+                                isInWishlist(product.id)
+                                  ? "bg-red-50 border-red-600 text-red-600"
+                                  : "bg-white border-neutral-300 text-neutral-600 hover:border-red-600 hover:text-red-600"
+                              }`}
+                              aria-label={isInWishlist(product.id) ? "Eliminar de lista de deseos" : "Agregar a lista de deseos"}
+                            >
+                              <Heart className={`w-4 h-4 ${isInWishlist(product.id) ? "fill-current" : ""}`} />
+                            </button>
+                          </div>
                         </div>
                       </Link>
                     );
@@ -751,24 +979,60 @@ export default function CatalogPage() {
               )}
 
               {/* Pagination */}
-              {maxPage > 1 && (
-                <div className="flex justify-center items-center gap-2 mt-8">
+              {total > 0 && maxPage > 1 && (
+                <div className="flex justify-center items-center gap-3 mt-8">
                   <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    onClick={() => {
+                      const newPage = Math.max(1, page - 1)
+                      setPage(newPage)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
                     disabled={page === 1}
-                    className="px-4 py-2 border border-neutral-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-100"
+                    className="px-4 py-2 border border-neutral-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-100 transition-colors font-medium"
                   >
-                    Anterior
+                    ← Anterior
                   </button>
-                  <span className="px-4 py-2 text-sm text-neutral-600">
-                    Página {page} de {maxPage}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {Array.from({ length: Math.min(maxPage, 7) }, (_, i) => {
+                      let pageNum: number
+                      if (maxPage <= 7) {
+                        pageNum = i + 1
+                      } else if (page <= 4) {
+                        pageNum = i + 1
+                      } else if (page >= maxPage - 3) {
+                        pageNum = maxPage - 6 + i
+                      } else {
+                        pageNum = page - 3 + i
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => {
+                            setPage(pageNum)
+                            window.scrollTo({ top: 0, behavior: 'smooth' })
+                          }}
+                          className={`px-3 py-2 min-w-[40px] rounded-lg transition-colors font-medium ${
+                            page === pageNum
+                              ? "bg-orange-600 text-white"
+                              : "border border-neutral-300 text-neutral-700 hover:bg-neutral-100"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      )
+                    })}
+                  </div>
                   <button
-                    onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
+                    onClick={() => {
+                      const newPage = Math.min(maxPage, page + 1)
+                      setPage(newPage)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
                     disabled={page === maxPage}
-                    className="px-4 py-2 border border-neutral-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-100"
+                    className="px-4 py-2 border border-neutral-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-100 transition-colors font-medium"
                   >
-                    Siguiente
+                    Siguiente →
                   </button>
                 </div>
               )}

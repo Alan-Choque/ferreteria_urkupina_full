@@ -1,9 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Header from "@/components/header"
-import MegaMenu from "@/components/mega-menu"
-import FooterFerretek from "@/components/footer-ferretek"
 
 export default function ContactPage() {
   const [formData, setFormData] = useState({
@@ -58,10 +55,7 @@ export default function ContactPage() {
   ]
 
   return (
-    <>
-      <Header />
-      <MegaMenu />
-      <main className="min-h-screen bg-white py-12">
+    <main className="min-h-screen bg-white py-12">
         <div className="max-w-6xl mx-auto px-4">
           <h1 className="text-3xl font-bold text-neutral-900 mb-8">Contáctanos</h1>
 
@@ -204,25 +198,22 @@ export default function ContactPage() {
               <div className="p-6 bg-neutral-50 border border-neutral-200 rounded-lg">
                 <h4 className="font-bold text-neutral-900 mb-3">Políticas</h4>
                 <div className="space-y-2 text-sm">
-                  <a href="#" className="text-red-600 hover:underline">
+                  <a href="/politica-privacidad" className="text-red-600 hover:underline">
                     Política de Privacidad
                   </a>
                   <br />
-                  <a href="#" className="text-red-600 hover:underline">
+                  <a href="/politica-cookies" className="text-red-600 hover:underline">
                     Política de Cookies
                   </a>
                   <br />
-                  <a href="#" className="text-red-600 hover:underline">
-                    Términos de Servicio
+                  <a href="/terminos-condiciones" className="text-red-600 hover:underline">
+                    Términos y Condiciones
                   </a>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </main>
-
-      <FooterFerretek />
-    </>
+    </main>
   )
 }

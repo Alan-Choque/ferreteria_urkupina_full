@@ -1,17 +1,42 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
-import { Grid, List, Loader2, Printer, Trash2, Upload, ArrowLeft, Share2, FolderPlus } from "lucide-react"
+import { Grid, List, Loader2, Printer, Trash2, Upload, ArrowLeft, Share2, FolderPlus, CheckCircle, X } from "lucide-react"
 
 import { ActionsGrid, type ActionItem } from "@/components/admin/ActionsGrid"
 import { filesService, type MediaFile } from "@/lib/services/files-service"
 
 export default function FilesPage() {
-  const [selectedAction, setSelectedAction] = useState<string | null>(null)
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  
+  // Detectar la acción desde la URL
+  const getActionFromPath = () => {
+    const actionParam = searchParams?.get("action")
+    if (actionParam) return actionParam
+    
+    // Si estamos en la ruta base sin action, mostrar dashboard (null)
+    if (pathname === "/admin/files" || pathname === "/admin/files/") {
+      return null // Mostrar dashboard
+    }
+    return null // Por defecto mostrar dashboard
+  }
+  
+  const [selectedAction, setSelectedAction] = useState<string | null>(getActionFromPath())
+  
+  // Actualizar selectedAction cuando cambia la ruta o query params
+  useEffect(() => {
+    const action = getActionFromPath()
+    setSelectedAction(action)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, searchParams])
+  
   const [files, setFiles] = useState<MediaFile[]>([])
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
 
   const actions: ActionItem[] = useMemo(
@@ -56,19 +81,33 @@ export default function FilesPage() {
     [],
   )
 
+  // Cargar datos cuando cambia la acción
   useEffect(() => {
-    if (selectedAction === "library" && files.length === 0) {
+    if (selectedAction === "library") {
       void loadFiles()
     }
-  }, [selectedAction, files.length])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAction])
 
   const loadFiles = async () => {
     setLoading(true)
+    setError(null)
     try {
       const result = await filesService.list({})
       setFiles(result.files)
     } catch (err) {
       console.error("Error cargando archivos", err)
+      // Si el error es 500 o el endpoint no existe, mostrar un mensaje más amigable
+      const errorMessage = err instanceof Error 
+        ? (err.message.includes("500") || err.message.includes("Internal Server Error")
+          ? "El servicio de archivos no está disponible en este momento. Por favor, intenta más tarde."
+          : err.message)
+        : "No se pudieron cargar los archivos"
+      setError(errorMessage)
+      // No establecer archivos vacíos, mantener el estado anterior si existe
+      if (files.length === 0) {
+        setFiles([])
+      }
     } finally {
       setLoading(false)
     }
@@ -345,7 +384,104 @@ export default function FilesPage() {
     </motion.div>
   )
 
-  const renderActionContent = () => {
+  // Renderizar dashboard de archivos
+  const renderDashboard = () => {
+    const totalFiles = files.length
+    const imageFiles = files.filter(f => f.type === "image").length
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0)
+    const sizeInMB = (totalSize / (1024 * 1024)).toFixed(2)
+    
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-6"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="rounded-lg p-6"
+            style={{
+              backgroundColor: "var(--admin-surface-light)",
+              border: "1px solid var(--admin-border)",
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm" style={{ color: "var(--admin-text-secondary)" }}>
+                  Total Archivos
+                </p>
+                <p className="text-2xl font-bold mt-2" style={{ color: "var(--admin-text-primary)" }}>
+                  {totalFiles}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg" style={{ backgroundColor: "var(--admin-primary)" }}>
+                <List size={24} color="#FFFFFF" />
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="rounded-lg p-6"
+            style={{
+              backgroundColor: "var(--admin-surface-light)",
+              border: "1px solid var(--admin-border)",
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm" style={{ color: "var(--admin-text-secondary)" }}>
+                  Imágenes
+                </p>
+                <p className="text-2xl font-bold mt-2" style={{ color: "var(--admin-success)" }}>
+                  {imageFiles}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg" style={{ backgroundColor: "var(--admin-success)" }}>
+                <Grid size={24} color="#FFFFFF" />
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="rounded-lg p-6"
+            style={{
+              backgroundColor: "var(--admin-surface-light)",
+              border: "1px solid var(--admin-border)",
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm" style={{ color: "var(--admin-text-secondary)" }}>
+                  Espacio Usado
+                </p>
+                <p className="text-2xl font-bold mt-2" style={{ color: "var(--admin-accent)" }}>
+                  {sizeInMB} MB
+                </p>
+              </div>
+              <div className="p-3 rounded-lg" style={{ backgroundColor: "var(--admin-accent)" }}>
+                <Upload size={24} color="#FFFFFF" />
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </motion.div>
+    )
+  }
+
+  const renderContent = () => {
+    if (selectedAction === null) {
+      return renderDashboard()
+    }
+    
     switch (selectedAction) {
       case "library":
         return renderLibrary()
@@ -353,33 +489,27 @@ export default function FilesPage() {
         return renderUploadInfo()
       case "shared":
         return renderSharedInfo()
-      case "collections":
-        return renderCollectionsInfo()
       case "print":
         return renderPrintInfo()
       default:
-        return renderEmptyState()
+        return renderDashboard()
     }
   }
 
-  const currentAction = actions.find((action) => action.id === selectedAction)
-
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-white">Gestor de archivos</h1>
-        </div>
-        {selectedAction === "library" && (
-          <button
-            type="button"
-            onClick={() => document.getElementById("file-input-refresh")?.click()}
-            className="rounded-md border border-gray-600 bg-gray-900 px-4 py-2 text-sm font-semibold text-gray-100 hover:border-orange-500 hover:bg-gray-800"
-          >
-            Subir rápido
-          </button>
-        )}
+      <div>
+        <h1 className="text-4xl font-bold mb-2" style={{ color: "var(--admin-text-primary)" }}>Archivos</h1>
+        <p className="text-sm" style={{ color: "var(--admin-text-secondary)" }}>
+          Gestiona tus archivos, imágenes y documentos
+        </p>
       </div>
+
+      {error && (
+        <div className="border border-red-700 bg-red-900/30 text-red-200 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+          <X size={16} /> {error}
+        </div>
+      )}
 
       <input
         id="file-input-refresh"
@@ -389,39 +519,7 @@ export default function FilesPage() {
         onChange={(event) => handleUpload(event.target)}
       />
 
-      {selectedAction === null ? (
-        <div className="space-y-4">
-          <ActionsGrid
-            title="Gestión de archivos"
-            subtitle="Panel general"
-            actions={actions}
-            selectedAction={selectedAction}
-            onSelect={setSelectedAction}
-          />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedAction(null)}
-                className="inline-flex items-center gap-2 rounded-md border border-gray-600 bg-gray-900 px-4 py-2 text-sm font-semibold text-gray-100 hover:border-orange-500 hover:bg-gray-800"
-              >
-                <ArrowLeft size={16} /> Volver al menú de acciones
-              </button>
-              <div>
-                <h2 className="text-xl font-semibold text-white">{currentAction?.label ?? "Acción"}</h2>
-                {currentAction?.description && (
-                  <p className="max-w-xl text-xs text-gray-400">{currentAction.description}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <AnimatePresence mode="wait">{renderActionContent()}</AnimatePresence>
-        </div>
-      )}
+      <AnimatePresence mode="wait">{renderContent()}</AnimatePresence>
     </div>
   )
 }

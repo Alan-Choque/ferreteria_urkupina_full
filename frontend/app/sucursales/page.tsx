@@ -1,9 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Header from "@/components/header"
-import MegaMenu from "@/components/mega-menu"
-import FooterFerretek from "@/components/footer-ferretek"
 
 interface Store {
   id: string
@@ -34,10 +31,7 @@ export default function StoresPage() {
   }
 
   return (
-    <>
-      <Header />
-      <MegaMenu />
-      <main className="min-h-screen bg-white py-12">
+    <main className="min-h-screen bg-white py-12">
         <div className="max-w-7xl mx-auto px-4">
           <h1 className="text-4xl font-bold text-neutral-900 mb-8">Nuestras Sucursales</h1>
 
@@ -131,9 +125,6 @@ export default function StoresPage() {
             </div>
           )}
         </div>
-      </main>
-
-      <FooterFerretek />
-    </>
+    </main>
   )
 }

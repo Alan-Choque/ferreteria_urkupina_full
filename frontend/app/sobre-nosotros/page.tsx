@@ -1,17 +1,11 @@
 "use client"
 
-import Header from "@/components/header"
-import MegaMenu from "@/components/mega-menu"
-import FooterFerretek from "@/components/footer-ferretek"
 import Link from "next/link"
 import { Target, Eye, History } from "lucide-react"
 
 export default function SobreNosotrosPage() {
   return (
-    <>
-      <Header />
-      <MegaMenu />
-      <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-white">
         {/* Hero Section */}
         <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white py-8">
           <div className="max-w-7xl mx-auto px-4">
@@ -77,9 +71,6 @@ export default function SobreNosotrosPage() {
             </Link>
           </div>
         </div>
-      </main>
-
-      <FooterFerretek />
-    </>
+    </main>
   )
 }
