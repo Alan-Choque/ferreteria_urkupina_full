@@ -31,8 +31,8 @@ export default function EditorialSection() {
         Guías y Consejos
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {articles.map((article) => (
-          <EditorialCard key={article.id} {...article} />
+        {articles.map((article, index) => (
+          <EditorialCard key={article.id} {...article} index={index} />
         ))}
       </div>
     </section>

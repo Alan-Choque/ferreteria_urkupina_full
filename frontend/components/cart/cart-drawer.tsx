@@ -88,8 +88,8 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                 </div>
               ) : (
                 <div className="py-4 space-y-4">
-                  {items.map((item) => (
-                    <CartItemRow key={item.id} item={item} />
+                  {items.map((item, index) => (
+                    <CartItemRow key={`${item.id}-${item.variantId}-${index}`} item={item} />
                   ))}
                 </div>
               )}

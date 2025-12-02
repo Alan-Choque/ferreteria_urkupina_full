@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import Header from "@/components/header"
-import MegaMenu from "@/components/mega-menu"
+import { useCart } from "@/hooks/use-cart"
+import { salesService } from "@/lib/services/sales-service"
+import { authService } from "@/lib/services/auth-service"
 
 interface CheckoutStep {
   number: number
@@ -21,13 +22,14 @@ interface CheckoutData {
   shippingMethod: "delivery" | "pickup"
   address?: string
   store?: string
-  paymentMethod: "card" | "qr" | "cash"
+  paymentMethod: "qr" | "cash"
   notes?: string
   coupon?: string
 }
 
 export default function CheckoutPage() {
   const router = useRouter()
+  const cart = useCart()
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<CheckoutData>({
     firstName: "",
@@ -37,13 +39,39 @@ export default function CheckoutPage() {
     documentType: "CI",
     documentNumber: "",
     shippingMethod: "delivery",
-    paymentMethod: "card",
+    paymentMethod: "qr",
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [discount, setDiscount] = useState(0)
   const [couponApplied, setCouponApplied] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
 
-  const subtotal = 450000 // Mock subtotal in BOB
+  // Si el usuario está autenticado, usar su email automáticamente y bloquearlo
+  useEffect(() => {
+    const loadUserEmail = async () => {
+      try {
+        const user = await authService.getCurrentUser()
+        if (user && user.email) {
+          setIsAuthenticated(true)
+          setUserEmail(user.email)
+          setFormData(prev => ({ ...prev, email: user.email }))
+        } else {
+          setIsAuthenticated(false)
+          setUserEmail(null)
+        }
+      } catch (error) {
+        // Usuario no autenticado, continuar sin cambios
+        setIsAuthenticated(false)
+        setUserEmail(null)
+      }
+    }
+    loadUserEmail()
+  }, [])
+
+  // Calcular subtotal real desde el carrito
+  const subtotal = cart.items.reduce((sum, item) => sum + item.variantPrice * item.qty, 0)
   const shipping = formData.shippingMethod === "delivery" ? 50 : 0
   const total = subtotal - discount + shipping
 
@@ -111,9 +139,88 @@ export default function CheckoutPage() {
     }
   }
 
-  const handlePlaceOrder = () => {
-    const orderId = Math.random().toString(36).substr(2, 9).toUpperCase()
-    router.push(`/order/${orderId}`)
+  const handlePlaceOrder = async () => {
+    if (cart.items.length === 0) {
+      setErrors({ general: "El carrito está vacío" })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      // Si el usuario está autenticado, usar su email de la cuenta para asegurar que coincida
+      let emailToUse = formData.email
+      try {
+        const user = await authService.getCurrentUser()
+        if (user && user.email) {
+          emailToUse = user.email.toLowerCase().trim()
+        }
+      } catch (error) {
+        // Usuario no autenticado, usar el email del formulario
+      }
+      
+      // Determinar método de pago según shippingMethod y paymentMethod
+      let metodo_pago: string | undefined
+      let direccion_entrega: string | undefined
+      let sucursal_recogida_id: number | undefined
+      
+      if (formData.shippingMethod === "pickup") {
+        // Recoger en tienda
+        // Mapear sucursales hardcodeadas a IDs (por ahora)
+        // TODO: Obtener sucursales del backend
+        const sucursalMap: Record<string, number> = {
+          "sucursal-la-paz": 1,
+          "sucursal-cochabamba": 2,
+          "sucursal-santa-cruz": 3,
+        }
+        if (formData.store) {
+          sucursal_recogida_id = sucursalMap[formData.store] || 1
+        }
+        
+        // Si paga con QR = PREPAGO (paga antes de recoger)
+        // Si paga con efectivo = RECOGER_EN_TIENDA (paga al recoger)
+        if (formData.paymentMethod === "cash") {
+          metodo_pago = "RECOGER_EN_TIENDA"
+        } else {
+          // qr = prepago (pero recoge en tienda)
+          metodo_pago = "PREPAGO"
+        }
+      } else if (formData.shippingMethod === "delivery") {
+        // Envío a domicilio
+        direccion_entrega = formData.address
+        if (formData.paymentMethod === "cash") {
+          metodo_pago = "CONTRA_ENTREGA"
+        } else {
+          // qr = prepago
+          metodo_pago = "PREPAGO"
+        }
+      }
+      
+      // Crear la orden en el backend
+      const order = await salesService.createOrder({
+        cliente_email: emailToUse,
+        cliente_nombre: `${formData.firstName} ${formData.lastName}`,
+        cliente_nit_ci: formData.documentNumber || undefined,
+        cliente_telefono: formData.phone || undefined,
+        items: cart.items.map(item => ({
+          variante_producto_id: typeof item.variantId === "string" ? parseInt(item.variantId) : item.variantId,
+          cantidad: item.qty,
+          precio_unitario: item.variantPrice,
+        })),
+        metodo_pago,
+        direccion_entrega,
+        sucursal_recogida_id,
+      })
+
+      // Limpiar el carrito
+      cart.clear()
+
+      // Redirigir a la página de confirmación de orden
+      router.push(`/order/${order.id}`)
+    } catch (error: any) {
+      console.error("Error al crear la orden:", error)
+      setErrors({ general: error.message || "Error al crear la orden. Por favor, intenta nuevamente." })
+      setIsSubmitting(false)
+    }
   }
 
   const handleInputChange = (field: keyof CheckoutData, value: string) => {
@@ -125,8 +232,6 @@ export default function CheckoutPage() {
 
   return (
     <>
-      <Header />
-      <MegaMenu />
       <main className="min-h-screen bg-white">
         <div className="max-w-4xl mx-auto px-4 py-12">
           {/* Progress Steps */}
@@ -206,14 +311,25 @@ export default function CheckoutPage() {
                   <div>
                     <label className="block text-sm font-bold text-neutral-900 mb-2">
                       Email <span className="text-red-600">*</span>
+                      {isAuthenticated && (
+                        <span className="text-xs font-normal text-neutral-500 ml-2">
+                          (No se puede cambiar - cuenta vinculada)
+                        </span>
+                      )}
                     </label>
                     <input
                       type="email"
                       value={formData.email}
-                      onChange={(e) => handleInputChange("email", e.target.value)}
+                      onChange={(e) => {
+                        // Si está autenticado, no permitir cambiar el email
+                        if (!isAuthenticated) {
+                          handleInputChange("email", e.target.value)
+                        }
+                      }}
+                      readOnly={isAuthenticated}
                       className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-600 ${
                         errors.email ? "border-red-600" : "border-neutral-300"
-                      }`}
+                      } ${isAuthenticated ? "bg-neutral-100 cursor-not-allowed" : ""}`}
                       placeholder="juan@example.com"
                       aria-invalid={!!errors.email}
                       aria-describedby={errors.email ? "email-error" : undefined}
@@ -379,26 +495,32 @@ export default function CheckoutPage() {
                   <div>
                     <h3 className="text-lg font-bold text-neutral-900 mb-4">Método de Pago</h3>
                     <div className="space-y-3">
-                      {["card", "qr", "cash"].map((method) => (
-                        <label
-                          key={method}
-                          className="flex items-center p-4 border border-neutral-300 rounded-lg cursor-pointer hover:bg-neutral-50"
-                        >
-                          <input
-                            type="radio"
-                            name="payment"
-                            value={method}
-                            checked={formData.paymentMethod === method}
-                            onChange={(e) => handleInputChange("paymentMethod", e.target.value)}
-                            className="w-4 h-4"
-                          />
-                          <span className="ml-3 flex-1 text-neutral-900 font-medium capitalize">
-                            {method === "card" && "Tarjeta de Crédito/Débito"}
-                            {method === "qr" && "Código QR (MercadoPago, Qvapor)"}
-                            {method === "cash" && "Contra Entrega"}
-                          </span>
-                        </label>
-                      ))}
+                      <label className="flex items-center p-4 border border-neutral-300 rounded-lg cursor-pointer hover:bg-neutral-50">
+                        <input
+                          type="radio"
+                          name="payment"
+                          value="qr"
+                          checked={formData.paymentMethod === "qr"}
+                          onChange={(e) => handleInputChange("paymentMethod", e.target.value)}
+                          className="w-4 h-4"
+                        />
+                        <span className="ml-3 flex-1 text-neutral-900 font-medium">
+                          Código QR (MercadoPago, Qvapor, etc.)
+                        </span>
+                      </label>
+                      <label className="flex items-center p-4 border border-neutral-300 rounded-lg cursor-pointer hover:bg-neutral-50">
+                        <input
+                          type="radio"
+                          name="payment"
+                          value="cash"
+                          checked={formData.paymentMethod === "cash"}
+                          onChange={(e) => handleInputChange("paymentMethod", e.target.value)}
+                          className="w-4 h-4"
+                        />
+                        <span className="ml-3 flex-1 text-neutral-900 font-medium">
+                          {formData.shippingMethod === "pickup" ? "Pago al Recoger (Efectivo)" : "Contra Entrega (Efectivo)"}
+                        </span>
+                      </label>
                     </div>
                   </div>
 
@@ -448,10 +570,9 @@ export default function CheckoutPage() {
                       </div>
                       <div className="flex justify-between">
                         <span>Método de Pago:</span>
-                        <span className="font-medium capitalize">
-                          {formData.paymentMethod === "card" && "Tarjeta"}
-                          {formData.paymentMethod === "qr" && "QR"}
-                          {formData.paymentMethod === "cash" && "Contra Entrega"}
+                        <span className="font-medium">
+                          {formData.paymentMethod === "qr" && "Código QR"}
+                          {formData.paymentMethod === "cash" && (formData.shippingMethod === "pickup" ? "Pago al Recoger" : "Contra Entrega")}
                         </span>
                       </div>
                     </div>
@@ -533,12 +654,20 @@ export default function CheckoutPage() {
                     </button>
                   )}
                   {currentStep === 4 && (
-                    <button
-                      onClick={handlePlaceOrder}
-                      className="w-full py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors"
-                    >
-                      Ir a Mi Pedido
-                    </button>
+                    <>
+                      {errors.general && (
+                        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                          {errors.general}
+                        </div>
+                      )}
+                      <button
+                        onClick={handlePlaceOrder}
+                        disabled={isSubmitting || cart.items.length === 0}
+                        className="w-full py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isSubmitting ? "Procesando pedido..." : "Confirmar Pedido"}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -546,12 +675,6 @@ export default function CheckoutPage() {
           </div>
         </div>
       </main>
-
-      <footer className="bg-neutral-900 text-white py-8 mt-16">
-        <div className="max-w-7xl mx-auto px-4 text-center text-neutral-400 text-sm">
-          <p>&copy; 2025 Ferretería Urkupina. Todos los derechos reservados.</p>
-        </div>
-      </footer>
     </>
   )
 }

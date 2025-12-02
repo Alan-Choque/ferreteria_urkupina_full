@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from "react"
 import Image from "next/image"
-import { Minus, Plus, ShieldCheck, Truck, Store, MessageCircle, ChevronLeft, ChevronRight } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { motion } from "framer-motion"
+import { Minus, Plus, ShieldCheck, Truck, Store, MessageCircle, ChevronLeft, ChevronRight, Heart } from "lucide-react"
 import type { ProductDetail, ProductVariant } from "@/lib/services/products-service"
 import { useCart } from "@/hooks/use-cart"
+import { useWishlist } from "@/lib/contexts/wishlist-context"
 import { useToast } from "@/lib/contexts/toast-context"
 
 interface ProductDetailViewProps {
@@ -28,7 +31,9 @@ export default function ProductDetailView({ product, variants }: ProductDetailVi
   const [qty, setQty] = useState(1)
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(variants[0]?.id ?? null)
   const { add } = useCart()
+  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist()
   const { showToast } = useToast()
+  const router = useRouter()
 
   const activeVariant = useMemo(() => {
     if (!variants.length) return null
@@ -55,6 +60,10 @@ export default function ProductDetailView({ product, variants }: ProductDetailVi
   }, [product])
 
   const handleAddToCart = () => {
+    // No requiere autenticación para agregar al carrito
+    // El carrito funciona sin cuenta (se guarda en localStorage)
+    // Solo se requiere autenticación al finalizar la compra (checkout)
+
     if (!canAdd) {
       showToast("Este producto aún no tiene un precio disponible.", "error")
       return
@@ -77,7 +86,21 @@ export default function ProductDetailView({ product, variants }: ProductDetailVi
       qty,
     )
 
-    showToast(`${product.nombre} x${qty} se añadió al carrito.`, "success")
+    const productName = product.nombre || "Producto"
+    const message = qty > 1 
+      ? `Producto "${productName}" (x${qty}) se agregó al carrito`
+      : `Producto "${productName}" se agregó al carrito`
+    showToast(message, "success")
+  }
+
+  const handleToggleWishlist = () => {
+    if (isInWishlist(product.id)) {
+      removeFromWishlist(product.id)
+      showToast("Producto eliminado de tu lista de deseos", "info")
+    } else {
+      addToWishlist(product)
+      showToast("Producto agregado a tu lista de deseos", "success")
+    }
   }
 
   const changeImage = (direction: "prev" | "next") => {
@@ -213,13 +236,30 @@ export default function ProductDetailView({ product, variants }: ProductDetailVi
               </button>
             </div>
 
-            <button
+            <motion.button
               disabled={!canAdd}
               onClick={handleAddToCart}
               className="flex-1 bg-orange-600 text-white rounded-2xl py-2.5 font-semibold shadow-lg shadow-orange-600/30 hover:bg-orange-700 transition disabled:bg-neutral-300 disabled:text-neutral-500 text-[15px]"
+              whileHover={canAdd ? { scale: 1.02, boxShadow: "0 10px 25px rgba(234, 88, 12, 0.4)" } : {}}
+              whileTap={canAdd ? { scale: 0.98 } : {}}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >
               Agregar al carrito
-            </button>
+            </motion.button>
+            <motion.button
+              onClick={handleToggleWishlist}
+              className={`p-2.5 rounded-2xl border-2 transition-colors ${
+                isInWishlist(product.id)
+                  ? "bg-red-50 border-red-600 text-red-600"
+                  : "bg-white border-neutral-300 text-neutral-600 hover:border-red-600 hover:text-red-600"
+              }`}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              aria-label={isInWishlist(product.id) ? "Eliminar de lista de deseos" : "Agregar a lista de deseos"}
+            >
+              <Heart className={`w-5 h-5 ${isInWishlist(product.id) ? "fill-current" : ""}`} />
+            </motion.button>
           </div>
 
           {highlights.length > 0 && (

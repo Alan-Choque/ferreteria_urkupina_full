@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useState } from "react"
 import Link from "next/link"
+import { motion, AnimatePresence } from "framer-motion"
 
 const slides = [
   {
@@ -54,57 +55,77 @@ export default function HeroFerretek() {
       <div className="relative max-w-7xl mx-auto px-4 py-6 md:py-9">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
           {/* Left Side */}
-          <div className="relative z-10">
-            <div className="mb-3">
-              <h1 className="text-2xl md:text-3xl lg:text-4xl font-black text-white mb-2">
-                {current.title}
-              </h1>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-none">
-                {current.titleLarge}
-              </h2>
-            </div>
-            
-            {/* Brand Logo */}
-            <div className="mb-5">
-              <div className="inline-block bg-white/20 backdrop-blur-sm px-5 py-2 rounded-lg">
-                <span className="text-xl md:text-2xl font-bold text-white italic">{current.brand}</span>
-              </div>
-            </div>
+          <div className="relative z-10 overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentSlide}
+                initial={{ opacity: 0, x: -100, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 100, scale: 0.95 }}
+                transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+              >
+                <div className="mb-3">
+                  <h1 className="text-2xl md:text-3xl lg:text-4xl font-black text-white mb-2">
+                    {current.title}
+                  </h1>
+                  <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-none">
+                    {current.titleLarge}
+                  </h2>
+                </div>
+                
+                {/* Brand Logo */}
+                <div className="mb-5">
+                  <div className="inline-block bg-white/20 backdrop-blur-sm px-5 py-2 rounded-lg">
+                    <span className="text-xl md:text-2xl font-bold text-white italic">{current.brand}</span>
+                  </div>
+                </div>
 
-            {/* Product Images Placeholder */}
-            <div className="flex gap-3 mb-4">
-              <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-                <span className="text-white text-[10px] text-center">Herramienta 1</span>
-              </div>
-              <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-                <span className="text-white text-[10px] text-center">Herramienta 2</span>
-              </div>
-              <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-                <span className="text-white text-[10px] text-center">Herramienta 3</span>
-              </div>
-            </div>
+                {/* Product Images Placeholder */}
+                <div className="flex gap-3 mb-4">
+                  <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                    <span className="text-white text-[10px] text-center">Herramienta 1</span>
+                  </div>
+                  <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                    <span className="text-white text-[10px] text-center">Herramienta 2</span>
+                  </div>
+                  <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                    <span className="text-white text-[10px] text-center">Herramienta 3</span>
+                  </div>
+                </div>
+              </motion.div>
+            </AnimatePresence>
           </div>
 
           {/* Right Side */}
-          <div className="relative z-10">
-            <div className="bg-gray-200/90 backdrop-blur-sm rounded-2xl p-5 shadow-2xl flex items-center justify-center">
-              <div className="bg-white px-6 py-5 rounded-xl flex flex-col items-center justify-center w-full">
-                <span className="text-base font-black text-neutral-900 text-center tracking-wide mb-4">
-                  FERRETERÍA URKUPINA
-                </span>
-                <div className="w-full">
-                  <img
-                    src="/logo-urkupina.png"
-                    alt="Logo Ferretería Urkupina"
-                    className="w-full h-40 md:h-48 object-contain mx-auto"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement
-                      target.style.display = "none"
-                    }}
-                  />
+          <div className="relative z-10 overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentSlide}
+                initial={{ opacity: 0, x: 100, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -100, scale: 0.95 }}
+                transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+              >
+                <div className="bg-gray-200/90 backdrop-blur-sm rounded-2xl p-5 shadow-2xl flex items-center justify-center">
+                  <div className="bg-white px-6 py-5 rounded-xl flex flex-col items-center justify-center w-full">
+                    <span className="text-base font-black text-neutral-900 text-center tracking-wide mb-4">
+                      FERRETERÍA URKUPINA
+                    </span>
+                    <div className="w-full">
+                      <img
+                        src="/logo-urkupina.png"
+                        alt="Logo Ferretería Urkupina"
+                        className="w-full h-40 md:h-48 object-contain mx-auto"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.style.display = "none"
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </div>

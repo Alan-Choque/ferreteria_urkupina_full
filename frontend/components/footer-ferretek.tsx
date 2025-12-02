@@ -5,7 +5,7 @@ import { Facebook, Instagram, Twitter, Youtube, MapPin, Phone, Mail } from "luci
 
 export default function FooterFerretek() {
   return (
-    <footer className="bg-neutral-900 text-white py-8 mt-16">
+    <footer className="bg-neutral-900 text-white py-8 mt-4">
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
           {/* Logo y Contacto */}
@@ -107,12 +107,12 @@ export default function FooterFerretek() {
                 </Link>
               </li>
               <li>
-                <Link href="/catalogo" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                <Link href="/como-comprar" className="text-neutral-300 hover:text-orange-500 transition-colors">
                   ¿Cómo Comprar?
                 </Link>
               </li>
               <li>
-                <Link href="/sucursales" className="text-neutral-300 hover:text-orange-500 transition-colors">
+                <Link href="/seguimiento-compra" className="text-neutral-300 hover:text-orange-500 transition-colors">
                   Seguimiento de Compra
                 </Link>
               </li>

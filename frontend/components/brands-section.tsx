@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { motion } from "framer-motion"
 import { productsService } from "@/lib/services/products-service"
 
 interface Brand {
@@ -35,6 +36,8 @@ export default function BrandsSection() {
         setBrands(Array.from(uniqueBrands.values()).slice(0, 12))
       } catch (err) {
         console.error("Error loading brands:", err)
+        // Si falla, dejar el array vacío para que el componente se oculte
+        setBrands([])
       } finally {
         setLoading(false)
       }
@@ -66,12 +69,26 @@ export default function BrandsSection() {
   return (
     <section className="bg-neutral-50 py-12">
       <div className="max-w-7xl mx-auto px-4">
-        <h2 className="text-3xl md:text-4xl font-black text-neutral-900 mb-8 text-center uppercase">Nuestras Marcas</h2>
+        <motion.h2
+          className="text-3xl md:text-4xl font-black text-neutral-900 mb-8 text-center uppercase"
+          initial={{ opacity: 0, y: -20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+        >
+          Nuestras Marcas
+        </motion.h2>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-          {brands.map((brand) => (
-            <div
+          {brands.map((brand, index) => (
+            <motion.div
               key={brand.id}
               className="bg-white border border-neutral-200 rounded-lg p-6 hover:shadow-lg transition-shadow flex items-center justify-center min-h-[100px]"
+              initial={{ opacity: 0, scale: 0.8 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.3, delay: index * 0.05 }}
+              whileHover={{ scale: 1.05, y: -5 }}
+              whileTap={{ scale: 0.95 }}
             >
               <div className="text-center">
                 <h3 className="font-bold text-neutral-900 text-lg">{brand.nombre}</h3>
@@ -79,7 +96,7 @@ export default function BrandsSection() {
                   <p className="text-xs text-neutral-500 mt-1">{brand.descripcion}</p>
                 )}
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       </div>

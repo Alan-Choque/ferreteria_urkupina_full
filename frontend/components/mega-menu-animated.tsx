@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, ArrowRight } from "lucide-react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 
@@ -154,6 +154,8 @@ export default function MegaMenuAnimated() {
   const [activeCategory, setActiveCategory] = useState<number | null>(null)
   const [hoveredSubmenu, setHoveredSubmenu] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState({ left: 0, width: 0 })
+  const [fixedMenuWidth, setFixedMenuWidth] = useState<number | null>(null)
+  const [isNavigating, setIsNavigating] = useState(false)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const submenuTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
@@ -163,12 +165,39 @@ export default function MegaMenuAnimated() {
     return categoryIndex !== -1 ? categoryIndex : null
   }
 
+  // Calcular el ancho del primer botón una vez al montar
+  useEffect(() => {
+    const firstButton = buttonRefs.current[0]
+    if (firstButton && !fixedMenuWidth) {
+      const width = firstButton.getBoundingClientRect().width
+      setFixedMenuWidth(width)
+    }
+  }, [fixedMenuWidth])
+
   useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
       if (submenuTimeoutRef.current) clearTimeout(submenuTimeoutRef.current)
     }
   }, [])
+
+  // Cerrar el menú cuando cambia la ruta - FORZAR CIERRE INMEDIATO SIN ANIMACIÓN
+  useEffect(() => {
+    setIsNavigating(true)
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+    if (submenuTimeoutRef.current) {
+      clearTimeout(submenuTimeoutRef.current)
+      submenuTimeoutRef.current = null
+    }
+    setActiveCategory(null)
+    setHoveredSubmenu(null)
+    // Resetear el flag después de un breve delay
+    const timer = setTimeout(() => setIsNavigating(false), 100)
+    return () => clearTimeout(timer)
+  }, [pathname])
 
   const handleMouseEnter = (index: number) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
@@ -179,9 +208,11 @@ export default function MegaMenuAnimated() {
       const navContainer = button.closest("nav")
       if (navContainer) {
         const navRect = navContainer.getBoundingClientRect()
+        // Usar el ancho fijo del primer botón si está disponible, sino usar el ancho del botón actual
+        const width = fixedMenuWidth || rect.width
         setMenuPosition({
           left: rect.left - navRect.left,
-          width: rect.width,
+          width: width,
         })
       }
     }
@@ -217,29 +248,35 @@ export default function MegaMenuAnimated() {
 
   const currentCategory = activeCategory !== null ? CATEGORIES[activeCategory] : null
   const activeCategoryIndex = getActiveCategoryIndex()
+  
+  // Si el pathname cambió, no mostrar el menú en absoluto
+  const shouldShowMenu = !isNavigating && activeCategory !== null && currentCategory && currentCategory.items.length > 0
 
   return (
     <nav className="relative bg-neutral-900" aria-label="Navegación principal" onMouseLeave={handleMouseLeave}>
       <div className="mx-auto max-w-7xl px-4">
-        {/* Fila superior: Nuestros Productos */}
-        <div className="border-b border-neutral-700 flex justify-center">
-          <Link
-            href={NUESTROS_PRODUCTOS.href}
-            className={`block whitespace-nowrap px-4 py-3 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white ${
-              pathname.startsWith(NUESTROS_PRODUCTOS.href) ? "bg-[var(--storefront-brand)]" : "hover:bg-[var(--storefront-brand)]"
-            }`}
-            onMouseEnter={() => {
-              // Cerrar cualquier menú abierto cuando se hace hover sobre "Nuestros Productos"
-              if (timeoutRef.current) clearTimeout(timeoutRef.current)
-              setActiveCategory(null)
-              setHoveredSubmenu(null)
-            }}
-          >
-            {NUESTROS_PRODUCTOS.name}
-          </Link>
-        </div>
-        {/* Fila inferior: Categorías */}
-        <ul className="flex items-center justify-center gap-1 overflow-x-auto">
+        {/* Fila única: Nuestros Productos y Categorías */}
+        <ul className="flex items-center justify-center gap-2 overflow-x-auto py-2.5">
+          {/* Nuestros Productos como primer elemento */}
+          <li className="relative">
+            <Link
+              href={NUESTROS_PRODUCTOS.href}
+              className={`flex items-center gap-1.5 whitespace-nowrap px-4 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white rounded-lg ${
+                pathname.startsWith(NUESTROS_PRODUCTOS.href) 
+                  ? "bg-[var(--storefront-brand)] py-4" 
+                  : "py-3 hover:bg-[var(--storefront-brand)] hover:rounded-lg"
+              }`}
+              onMouseEnter={() => {
+                // Cerrar cualquier menú abierto cuando se hace hover sobre "Nuestros Productos"
+                if (timeoutRef.current) clearTimeout(timeoutRef.current)
+                setActiveCategory(null)
+                setHoveredSubmenu(null)
+              }}
+            >
+              <span>{NUESTROS_PRODUCTOS.name}</span>
+              <ArrowRight className="w-5 h-5" />
+            </Link>
+          </li>
           {CATEGORIES.map((category, index) => (
             <li 
               key={category.name} 
@@ -251,9 +288,11 @@ export default function MegaMenuAnimated() {
                 ref={(el) => {
                   buttonRefs.current[index] = el as any
                 }}
-                className={`block whitespace-nowrap px-4 py-3 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white ${
+                className={`block whitespace-nowrap px-4 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white rounded-lg ${
                   /* Updated to use CSS variable for brand color */
-                  activeCategoryIndex === index ? "bg-[var(--storefront-brand)]" : "hover:bg-[var(--storefront-brand)]"
+                  activeCategoryIndex === index 
+                    ? "bg-[var(--storefront-brand)] py-4" 
+                    : "py-3 hover:bg-[var(--storefront-brand)] hover:rounded-lg"
                 }`}
                 onMouseEnter={() => handleMouseEnter(index)}
                 onMouseLeave={handleMouseLeaveItem}
@@ -267,17 +306,17 @@ export default function MegaMenuAnimated() {
       </div>
 
       <AnimatePresence>
-        {activeCategory !== null && currentCategory && currentCategory.items.length > 0 && (
+        {shouldShowMenu && (
           <motion.div
             variants={{
-              hidden: { opacity: 0, y: -4 },
-              visible: { opacity: 1, y: 0, transition: { duration: 0.12, ease: [0.16, 1, 0.3, 1] } },
-              exit: { opacity: 0, y: -4, transition: { duration: 0.08, ease: [0.16, 1, 0.3, 1] } },
+              hidden: { opacity: 0, y: -4, pointerEvents: "none" },
+              visible: { opacity: 1, y: 0, pointerEvents: "auto", transition: { duration: 0.12, ease: [0.16, 1, 0.3, 1] } },
+              exit: { opacity: 0, y: -4, pointerEvents: "none", transition: { duration: 0.05, ease: [0.16, 1, 0.3, 1] } },
             }}
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="absolute top-full mt-1 z-50 bg-white shadow-lg border border-neutral-300 border-l-2 border-l-[var(--storefront-brand)]"
+            className="absolute top-full mt-1 z-30 bg-white shadow-lg border border-neutral-300 border-l-2 border-l-[var(--storefront-brand)] rounded-lg"
             style={{
               left: `${menuPosition.left}px`,
               width: `${menuPosition.width}px`,
@@ -294,11 +333,11 @@ export default function MegaMenuAnimated() {
             }}
           >
             <div className="p-3">
-              <div className="space-y-0.5">
+              <div className="space-y-0">
                 {currentCategory.items.map((item, idx) => (
                   <div 
                     key={item.name} 
-                    className="relative"
+                    className={`relative ${idx < currentCategory.items.length - 1 ? "border-b border-neutral-300" : ""}`}
                     onMouseEnter={() => {
                       if (item.hasSubmenu) {
                         if (submenuTimeoutRef.current) clearTimeout(submenuTimeoutRef.current)
@@ -315,21 +354,41 @@ export default function MegaMenuAnimated() {
                     }}
                   >
                     {item.hasSubmenu ? (
-                      <div className="flex w-full items-center justify-between rounded px-3 py-2 text-[13px] text-neutral-800 transition-colors hover:bg-neutral-100 group">
+                      <div className={`flex w-full items-center justify-between rounded px-3 py-2.5 text-[13px] transition-colors group ${
+                        pathname.startsWith(item.href) 
+                          ? "bg-[var(--storefront-brand)] text-white" 
+                          : "text-neutral-800 hover:bg-neutral-100"
+                      }`}>
                         <Link
                           href={item.href}
                           className="flex-1"
-                          onClick={() => setActiveCategory(null)}
+                          onClick={() => {
+                            if (timeoutRef.current) clearTimeout(timeoutRef.current)
+                            if (submenuTimeoutRef.current) clearTimeout(submenuTimeoutRef.current)
+                            setActiveCategory(null)
+                            setHoveredSubmenu(null)
+                          }}
                         >
                           <span>{item.name}</span>
                         </Link>
-                        <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 ml-2" style={{ color: "var(--storefront-brand)" }} />
+                        <ChevronRight className={`h-3.5 w-3.5 flex-shrink-0 ml-2 ${
+                          pathname.startsWith(item.href) ? "text-white" : ""
+                        }`} style={pathname.startsWith(item.href) ? {} : { color: "var(--storefront-brand)" }} />
                       </div>
                     ) : (
                       <Link
                         href={item.href}
-                        className="flex w-full items-center justify-between rounded px-3 py-2 text-[13px] text-neutral-800 transition-colors hover:bg-neutral-100"
-                        onClick={() => setActiveCategory(null)}
+                        className={`flex w-full items-center justify-between rounded px-3 py-2.5 text-[13px] transition-colors ${
+                          pathname.startsWith(item.href)
+                            ? "bg-[var(--storefront-brand)] text-white"
+                            : "text-neutral-800 hover:bg-neutral-100"
+                        }`}
+                        onClick={() => {
+                          if (timeoutRef.current) clearTimeout(timeoutRef.current)
+                          if (submenuTimeoutRef.current) clearTimeout(submenuTimeoutRef.current)
+                          setActiveCategory(null)
+                          setHoveredSubmenu(null)
+                        }}
                       >
                         <span>{item.name}</span>
                       </Link>
@@ -361,6 +420,8 @@ export default function MegaMenuAnimated() {
                             className="inline-block rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90 whitespace-nowrap"
                             style={{ backgroundColor: "var(--storefront-cta)" }}
                             onClick={() => {
+                              if (timeoutRef.current) clearTimeout(timeoutRef.current)
+                              if (submenuTimeoutRef.current) clearTimeout(submenuTimeoutRef.current)
                               setActiveCategory(null)
                               setHoveredSubmenu(null)
                             }}

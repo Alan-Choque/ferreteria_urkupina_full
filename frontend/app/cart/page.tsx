@@ -1,8 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import Header from "@/components/header"
-import MegaMenu from "@/components/mega-menu"
 import { useCart } from "@/hooks/use-cart"
 import { CartItemRow } from "@/components/cart/cart-item-row"
 import { CartSummary } from "@/components/cart/cart-summary"
@@ -11,10 +9,7 @@ export default function CartPage() {
   const { items } = useCart()
 
   return (
-    <>
-      <Header />
-      <MegaMenu />
-      <main className="min-h-screen bg-white py-12">
+    <main className="min-h-screen bg-white py-12">
         <div className="max-w-6xl mx-auto px-4">
           <h1 className="text-3xl font-bold text-neutral-900 mb-8">Carrito de Compras</h1>
 
@@ -47,13 +42,6 @@ export default function CartPage() {
             </div>
           )}
         </div>
-      </main>
-
-      <footer className="bg-neutral-900 text-white py-8 mt-16">
-        <div className="max-w-7xl mx-auto px-4 text-center text-neutral-400 text-sm">
-          <p>&copy; 2025 Ferretería Urkupina. Todos los derechos reservados.</p>
-        </div>
-      </footer>
-    </>
+    </main>
   )
 }

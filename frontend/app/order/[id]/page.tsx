@@ -1,34 +1,75 @@
 "use client"
 
-import { use } from "react"
+import { use, useState, useEffect } from "react"
 import Link from "next/link"
-import { Facebook, Instagram, Twitter, Youtube, MapPin, Phone, Mail } from "lucide-react"
 import jsPDF from "jspdf"
-import Header from "@/components/header"
-import MegaMenu from "@/components/mega-menu"
+import { salesService } from "@/lib/services/sales-service"
+import { Loader2 } from "lucide-react"
+import type { SalesOrder } from "@/lib/contracts"
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  // Mock order data
-  const order = {
-    id: id,
-    date: "2024-11-15",
-    status: "shipped" as const,
-    customer: "Juan Pérez",
-    email: "juan@example.com",
-    phone: "71234567",
-    shippingAddress: "Calle Principal 123, Apto 4B, La Paz",
-    items: [
-      { name: "Taladro Bosch GSB 20-2", quantity: 1, price: 244000 },
-      { name: "Esmeril Angular Bosch", quantity: 1, price: 189000 },
-    ],
-    subtotal: 433000,
-    discount: 43300,
-    shipping: 50,
-    total: 389750,
+  const [order, setOrder] = useState<SalesOrder | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const loadOrder = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const orderData = await salesService.getOrder(id)
+        setOrder(orderData)
+      } catch (err: any) {
+        console.error("Error loading order:", err)
+        setError(err instanceof Error ? err.message : "Error al cargar el pedido")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadOrder()
+  }, [id])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white py-12">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !order) {
+    return (
+      <div className="min-h-screen bg-white py-12">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="text-center py-12 p-6 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-600 mb-4">{error || "Pedido no encontrado"}</p>
+            <Link href="/account/orders" className="text-red-600 font-bold hover:underline">
+              ← Volver a Pedidos
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Asegurar que totals siempre esté definido con valores por defecto
+  const totals = order.totals || {
+    sub: 0,
+    discount: 0,
+    shipping: 0,
+    total: 0,
+    currency: "BOB" as const,
   }
 
   const downloadPDF = () => {
+    if (!order) return
+    
     const doc = new jsPDF()
     const pageWidth = doc.internal.pageSize.getWidth()
     const margin = 20
@@ -65,13 +106,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     doc.setFont("helvetica", "normal")
     doc.text(`Número de Pedido: ${order.id}`, margin, yPos)
     yPos += 6
-    doc.text(`Fecha: ${new Date(order.date).toLocaleDateString("es-BO", { 
+    doc.text(`Fecha: ${new Date(order.createdAt).toLocaleDateString("es-BO", { 
       year: "numeric", 
       month: "long", 
       day: "numeric" 
     })}`, margin, yPos)
     yPos += 6
-    doc.text(`Estado: ${order.status === "shipped" ? "Enviado" : order.status}`, margin, yPos)
+    
+    const statusLabels: Record<string, string> = {
+      PENDIENTE: "Pendiente",
+      PAGADO: "Pagado",
+      ENVIADO: "Enviado",
+      ENTREGADO: "Entregado",
+      CANCELADO: "Cancelado",
+    }
+    const statusLabel = statusLabels[order.status.toUpperCase()] || order.status
+    doc.text(`Estado: ${statusLabel}`, margin, yPos)
     yPos += 10
 
     // Información del cliente
@@ -82,13 +132,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
     doc.setFontSize(10)
     doc.setFont("helvetica", "normal")
-    doc.text(`Nombre: ${order.customer}`, margin, yPos)
-    yPos += 6
-    doc.text(`Email: ${order.email}`, margin, yPos)
-    yPos += 6
-    doc.text(`Teléfono: ${order.phone}`, margin, yPos)
-    yPos += 6
-    doc.text(`Dirección de Envío: ${order.shippingAddress}`, margin, yPos)
+    doc.text(`Nombre: ${order.customerId || "Cliente"}`, margin, yPos)
     yPos += 10
 
     // Artículos
@@ -112,11 +156,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
     doc.setFont("helvetica", "normal")
     order.items.forEach((item) => {
-      const itemTotal = item.price * item.quantity
+      const itemTotal = item.price * item.qty
       const itemName = item.name.length > 40 ? item.name.substring(0, 37) + "..." : item.name
       
       doc.text(itemName, margin, yPos)
-      doc.text(item.quantity.toString(), margin + 100, yPos)
+      doc.text(item.qty.toString(), margin + 100, yPos)
       doc.text(`Bs. ${item.price.toLocaleString("es-BO")}`, margin + 120, yPos)
       doc.text(`Bs. ${itemTotal.toLocaleString("es-BO")}`, margin + 160, yPos)
       yPos += 6
@@ -129,23 +173,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     // Resumen
     doc.setFontSize(10)
     doc.text("Subtotal:", margin + 100, yPos)
-    doc.text(`Bs. ${order.subtotal.toLocaleString("es-BO")}`, margin + 160, yPos)
+    doc.text(`Bs. ${totals.sub.toLocaleString("es-BO")}`, margin + 160, yPos)
     yPos += 6
 
-    if (order.discount > 0) {
+    if (totals.discount > 0) {
       doc.text("Descuento:", margin + 100, yPos)
-      doc.text(`-Bs. ${order.discount.toLocaleString("es-BO")}`, margin + 160, yPos)
+      doc.text(`-Bs. ${totals.discount.toLocaleString("es-BO")}`, margin + 160, yPos)
       yPos += 6
     }
 
     doc.text("Envío:", margin + 100, yPos)
-    doc.text(`Bs. ${order.shipping.toLocaleString("es-BO")}`, margin + 160, yPos)
+    doc.text(`Bs. ${totals.shipping.toLocaleString("es-BO")}`, margin + 160, yPos)
     yPos += 8
 
     doc.setFont("helvetica", "bold")
     doc.setFontSize(12)
     doc.text("TOTAL:", margin + 100, yPos)
-    doc.text(`Bs. ${order.total.toLocaleString("es-BO")}`, margin + 160, yPos)
+    doc.text(`Bs. ${totals.total.toLocaleString("es-BO")}`, margin + 160, yPos)
     yPos += 15
 
     // Pie de página
@@ -161,17 +205,154 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     doc.save(`recibo-pedido-${order.id}.pdf`)
   }
 
-  const timeline = [
-    { status: "Pending", label: "Pedido Realizado", date: "2024-11-15", completed: true },
-    { status: "Paid", label: "Pago Recibido", date: "2024-11-15", completed: true },
-    { status: "Shipped", label: "Enviado", date: "2024-11-17", completed: true },
-    { status: "Delivered", label: "Entregado", date: "", completed: false },
-  ]
+  // Construir timeline basado en el método de pago/entrega y estado real del pedido
+  const getTimeline = () => {
+    const status = order.status.toUpperCase()
+    const metodoPago = (order as any).metodo_pago?.toUpperCase() || ""
+    const orderDate = new Date(order.createdAt)
+    const fechaPago = (order as any).fecha_pago ? new Date((order as any).fecha_pago) : null
+    const fechaPreparacion = (order as any).fecha_preparacion ? new Date((order as any).fecha_preparacion) : null
+    const fechaEnvio = (order as any).fecha_envio ? new Date((order as any).fecha_envio) : null
+    const fechaEntrega = (order as any).fecha_entrega ? new Date((order as any).fecha_entrega) : null
+    
+    // Verificar si es recoger en tienda (tiene sucursal_recogida_id o metodo_pago es RECOGER_EN_TIENDA)
+    const esRecogerEnTienda = (order as any).sucursal_recogida_id || metodoPago === "RECOGER_EN_TIENDA"
+    
+    // Si es RECOGER_EN_TIENDA (pago al recoger), mostrar timeline sin pago previo
+    if (metodoPago === "RECOGER_EN_TIENDA") {
+      return [
+        { 
+          status: "Pending", 
+          label: "Pedido Realizado", 
+          date: orderDate.toISOString(), 
+          completed: true 
+        },
+        { 
+          status: "Preparing", 
+          label: "Preparando", 
+          date: fechaPreparacion?.toISOString() || "", 
+          completed: !!fechaPreparacion || status === "LISTO_PARA_RECOGER" || status === "ENTREGADO"
+        },
+        { 
+          status: "Ready", 
+          label: "Listo para Recoger", 
+          date: status === "LISTO_PARA_RECOGER" || status === "ENTREGADO" ? (fechaPreparacion?.toISOString() || orderDate.toISOString()) : "", 
+          completed: status === "LISTO_PARA_RECOGER" || status === "ENTREGADO"
+        },
+        { 
+          status: "PickedUp", 
+          label: "Recogido y Pagado", 
+          date: fechaEntrega?.toISOString() || "", 
+          completed: status === "ENTREGADO"
+        },
+      ]
+    }
+    
+    // Si es PREPAGO pero recoge en tienda (tiene sucursal_recogida_id)
+    if (metodoPago === "PREPAGO" && esRecogerEnTienda) {
+      return [
+        { 
+          status: "Pending", 
+          label: "Pedido Realizado", 
+          date: orderDate.toISOString(), 
+          completed: true 
+        },
+        { 
+          status: "Paid", 
+          label: "Pago Recibido", 
+          date: fechaPago?.toISOString() || (status === "PAGADO" || status === "LISTO_PARA_RECOGER" || status === "ENTREGADO" ? orderDate.toISOString() : ""), 
+          completed: !!fechaPago || status === "PAGADO" || status === "LISTO_PARA_RECOGER" || status === "ENTREGADO"
+        },
+        { 
+          status: "Preparing", 
+          label: "Preparando", 
+          date: fechaPreparacion?.toISOString() || "", 
+          completed: !!fechaPreparacion || status === "LISTO_PARA_RECOGER" || status === "ENTREGADO"
+        },
+        { 
+          status: "Ready", 
+          label: "Listo para Recoger", 
+          date: status === "LISTO_PARA_RECOGER" || status === "ENTREGADO" ? (fechaPreparacion?.toISOString() || orderDate.toISOString()) : "", 
+          completed: status === "LISTO_PARA_RECOGER" || status === "ENTREGADO"
+        },
+        { 
+          status: "PickedUp", 
+          label: "Recogido", 
+          date: fechaEntrega?.toISOString() || "", 
+          completed: status === "ENTREGADO"
+        },
+      ]
+    }
+    
+    // Si es CONTRA_ENTREGA, mostrar timeline sin pago previo
+    if (metodoPago === "CONTRA_ENTREGA") {
+      return [
+        { 
+          status: "Pending", 
+          label: "Pedido Realizado", 
+          date: orderDate.toISOString(), 
+          completed: true 
+        },
+        { 
+          status: "Preparing", 
+          label: "Preparando", 
+          date: fechaPreparacion?.toISOString() || "", 
+          completed: !!fechaPreparacion || status === "EN_ENVIO" || status === "ENTREGADO"
+        },
+        { 
+          status: "Shipped", 
+          label: "Enviado", 
+          date: fechaEnvio?.toISOString() || "", 
+          completed: !!fechaEnvio || status === "ENTREGADO"
+        },
+        { 
+          status: "Delivered", 
+          label: "Entregado y Pagado", 
+          date: fechaEntrega?.toISOString() || "", 
+          completed: status === "ENTREGADO"
+        },
+      ]
+    }
+    
+    // Si es PREPAGO (o cualquier otro método con pago previo)
+    return [
+      { 
+        status: "Pending", 
+        label: "Pedido Realizado", 
+        date: orderDate.toISOString(), 
+        completed: true 
+      },
+      { 
+        status: "Paid", 
+        label: "Pago Recibido", 
+        date: fechaPago?.toISOString() || (status === "PAGADO" || status === "ENVIADO" || status === "ENTREGADO" ? orderDate.toISOString() : ""), 
+        completed: !!fechaPago || status === "PAGADO" || status === "ENVIADO" || status === "ENTREGADO"
+      },
+      { 
+        status: "Preparing", 
+        label: "Preparando", 
+        date: fechaPreparacion?.toISOString() || "", 
+        completed: !!fechaPreparacion || status === "EN_ENVIO" || status === "ENTREGADO"
+      },
+      { 
+        status: "Shipped", 
+        label: "Enviado", 
+        date: fechaEnvio?.toISOString() || "", 
+        completed: !!fechaEnvio || status === "ENTREGADO"
+      },
+      { 
+        status: "Delivered", 
+        label: "Entregado", 
+        date: fechaEntrega?.toISOString() || "", 
+        completed: status === "ENTREGADO"
+      },
+    ]
+  }
+  
+  const timeline = getTimeline()
 
   return (
     <>
-      <Header />
-      <MegaMenu />
       <main className="min-h-screen bg-white py-12">
         <div className="max-w-4xl mx-auto px-4">
           <div className="mb-8">
@@ -180,7 +361,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </Link>
           </div>
 
-          <h1 className="text-3xl font-bold text-neutral-900 mb-8">Pedido {order.id}</h1>
+          <h1 className="text-3xl font-bold text-neutral-900 mb-8">Pedido #{order.id}</h1>
 
           <div className="grid grid-cols-3 gap-8">
             {/* Main Content */}
@@ -222,26 +403,108 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
               </div>
 
+              {/* Delivery/Pickup Information */}
+              {(order as any).metodo_pago && (
+                <div className="p-6 bg-neutral-50 rounded-lg border border-neutral-200">
+                  <h2 className="font-bold text-lg text-neutral-900 mb-4">Información de Entrega/Recogida</h2>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-neutral-600">Método:</span>
+                      <span className="font-medium text-neutral-900">
+                        {(order as any).metodo_pago === "PREPAGO" && "Prepago"}
+                        {(order as any).metodo_pago === "CONTRA_ENTREGA" && "Contra Entrega"}
+                        {(order as any).metodo_pago === "RECOGER_EN_TIENDA" && "Recoger en Tienda"}
+                        {(order as any).metodo_pago === "CREDITO" && "Crédito"}
+                        {!["PREPAGO", "CONTRA_ENTREGA", "RECOGER_EN_TIENDA", "CREDITO"].includes((order as any).metodo_pago || "") && (order as any).metodo_pago}
+                      </span>
+                    </div>
+                    {(order as any).direccion_entrega && (
+                      <div className="flex justify-between">
+                        <span className="text-neutral-600">Dirección de entrega:</span>
+                        <span className="font-medium text-neutral-900 text-right max-w-xs">
+                          {(order as any).direccion_entrega}
+                        </span>
+                      </div>
+                    )}
+                    {(order as any).fecha_preparacion && (
+                      <div className="flex justify-between">
+                        <span className="text-neutral-600">Fecha de preparación:</span>
+                        <span className="font-medium text-neutral-900">
+                          {new Date((order as any).fecha_preparacion).toLocaleDateString("es-BO", {
+                            day: "2-digit",
+                            month: "long",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    )}
+                    {(order as any).fecha_envio && (
+                      <div className="flex justify-between">
+                        <span className="text-neutral-600">Fecha de envío:</span>
+                        <span className="font-medium text-neutral-900">
+                          {new Date((order as any).fecha_envio).toLocaleDateString("es-BO", {
+                            day: "2-digit",
+                            month: "long",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    )}
+                    {(order as any).fecha_entrega && (
+                      <div className="flex justify-between">
+                        <span className="text-neutral-600">Fecha de entrega/recogida:</span>
+                        <span className="font-medium text-neutral-900">
+                          {new Date((order as any).fecha_entrega).toLocaleDateString("es-BO", {
+                            day: "2-digit",
+                            month: "long",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    )}
+                    {(order as any).persona_recibe && (
+                      <div className="flex justify-between">
+                        <span className="text-neutral-600">Recibido por:</span>
+                        <span className="font-medium text-neutral-900">
+                          {(order as any).persona_recibe}
+                        </span>
+                      </div>
+                    )}
+                    {(order as any).observaciones_entrega && (
+                      <div className="mt-3 pt-3 border-t border-neutral-200">
+                        <span className="text-neutral-600 text-xs">Observaciones:</span>
+                        <p className="text-neutral-900 text-sm mt-1">
+                          {(order as any).observaciones_entrega}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Items */}
               <div className="p-6 bg-neutral-50 rounded-lg border border-neutral-200">
                 <h2 className="font-bold text-lg text-neutral-900 mb-4">Artículos</h2>
                 <div className="space-y-4">
-                  {order.items.map((item, index) => (
-                    <div key={index} className="flex justify-between py-3 border-b border-neutral-200 last:border-b-0">
+                  {order.items.map((item) => (
+                    <div key={item.id} className="flex justify-between py-3 border-b border-neutral-200 last:border-b-0">
                       <div>
                         <p className="font-medium text-neutral-900">{item.name}</p>
-                        <p className="text-sm text-neutral-600">Cantidad: {item.quantity}</p>
+                        <p className="text-sm text-neutral-600">Cantidad: {item.qty}</p>
                       </div>
-                      <p className="font-bold text-neutral-900">Bs. {item.price.toLocaleString("es-BO")}</p>
+                      <div className="text-right">
+                        <p className="font-bold text-neutral-900">Bs. {(item.price * item.qty).toLocaleString("es-BO")}</p>
+                        <p className="text-sm text-neutral-600">Bs. {item.price.toLocaleString("es-BO")} c/u</p>
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
-
-              {/* Shipping Address */}
-              <div className="p-6 bg-neutral-50 rounded-lg border border-neutral-200">
-                <h2 className="font-bold text-lg text-neutral-900 mb-4">Dirección de Envío</h2>
-                <p className="text-neutral-700">{order.shippingAddress}</p>
               </div>
 
               {/* Action */}
@@ -261,13 +524,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <h3 className="font-bold text-neutral-900 mb-3">Información del Cliente</h3>
                   <div className="space-y-2 text-sm">
                     <p>
-                      <span className="text-neutral-600">Nombre:</span> {order.customer}
-                    </p>
-                    <p>
-                      <span className="text-neutral-600">Email:</span> {order.email}
-                    </p>
-                    <p>
-                      <span className="text-neutral-600">Teléfono:</span> {order.phone}
+                      <span className="text-neutral-600">Nombre:</span> {order.customerId || "Cliente"}
                     </p>
                   </div>
                 </div>
@@ -278,22 +535,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <div className="space-y-2 text-sm mb-4">
                     <div className="flex justify-between">
                       <span>Subtotal:</span>
-                      <span>Bs. {order.subtotal.toLocaleString("es-BO")}</span>
+                      <span>Bs. {totals.sub.toLocaleString("es-BO")}</span>
                     </div>
-                    {order.discount > 0 && (
+                    {totals.discount > 0 && (
                       <div className="flex justify-between text-green-600">
                         <span>Descuento:</span>
-                        <span>-Bs. {order.discount.toLocaleString("es-BO")}</span>
+                        <span>-Bs. {totals.discount.toLocaleString("es-BO")}</span>
                       </div>
                     )}
                     <div className="flex justify-between">
                       <span>Envío:</span>
-                      <span>Bs. {order.shipping}</span>
+                      <span>Bs. {totals.shipping.toLocaleString("es-BO")}</span>
                     </div>
                   </div>
                   <div className="flex justify-between font-bold text-lg pt-4 border-t border-neutral-200">
                     <span>Total:</span>
-                    <span>Bs. {order.total.toLocaleString("es-BO")}</span>
+                    <span>Bs. {totals.total.toLocaleString("es-BO")}</span>
                   </div>
                 </div>
               </div>
@@ -301,193 +558,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </main>
-
-      <footer className="bg-neutral-900 text-white py-12 mt-16">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {/* Contacto, Dirección y Mapa */}
-            <div>
-              <h3 className="font-bold text-lg mb-4">Contacto</h3>
-              <div className="space-y-3 text-sm text-neutral-300">
-                <div className="flex items-start gap-2">
-                  <MapPin className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-white">Dirección:</p>
-                    <p>Av. San Joaquín esquina Calle "A"</p>
-                    <p className="text-xs text-neutral-400">Lado del Colegio Miguel Antelo</p>
-                    <p className="text-xs text-neutral-400">Guayaramerin, Bolivia</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Phone className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-white">Teléfono:</p>
-                    <p>+591 68464378</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Mail className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-white">Email:</p>
-                    <p>info@urkupina.com</p>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4">
-                <h4 className="font-semibold text-sm mb-2 text-white">Ubicación</h4>
-                <div className="w-full h-32 bg-neutral-800 rounded-lg overflow-hidden border border-neutral-700">
-                  <iframe
-                    src="https://www.google.com/maps?q=Av.+San+Joaquín+esquina+Calle+A,+Colegio+Miguel+Antelo,+Guayaramerin,+Bolivia&output=embed"
-                    width="100%"
-                    height="100%"
-                    style={{ border: 0 }}
-                    allowFullScreen
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    className="w-full h-full"
-                    title="Ubicación Ferretería Urkupina - Av. San Joaquín esquina Calle A, Guayaramerin"
-                  />
-                </div>
-                <p className="text-xs text-neutral-400 mt-2">Av. San Joaquín esquina Calle "A", lado del Colegio Miguel Antelo, Guayaramerin</p>
-              </div>
-            </div>
-
-            {/* Links del Sistema */}
-            <div>
-              <h3 className="font-bold text-lg mb-4">Enlaces</h3>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <Link href="/" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Inicio
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/catalogo" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Catálogo
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/categorias" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Categorías
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/sucursales" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Sucursales
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/contacto" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Contacto
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/account" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Mi Cuenta
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/cart" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Carrito
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Información Adicional */}
-            <div>
-              <h3 className="font-bold text-lg mb-4">Información</h3>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <Link href="/politica-privacidad" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Política de Privacidad
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/terminos-condiciones" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Términos y Condiciones
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/preguntas-frecuentes" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Preguntas Frecuentes
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/sobre-nosotros" className="text-neutral-300 hover:text-orange-500 transition-colors">
-                    Sobre Nosotros
-                  </Link>
-                </li>
-              </ul>
-              <div className="mt-6">
-                <h4 className="font-semibold text-sm mb-3 text-white">Horario de Atención</h4>
-                <div className="text-sm text-neutral-300 space-y-1">
-                  <p>Lunes - Viernes: 8:00 - 18:00</p>
-                  <p>Sábados: 9:00 - 14:00</p>
-                  <p>Domingos: Cerrado</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Redes Sociales */}
-            <div>
-              <h3 className="font-bold text-lg mb-4">Síguenos</h3>
-              <p className="text-sm text-neutral-300 mb-4">
-                Somos tu ferretería de confianza en Guayaramerin.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <a
-                  href="https://www.facebook.com/profile.php?id=61579523549381"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 bg-neutral-800 hover:bg-blue-600 rounded-full flex items-center justify-center transition-colors"
-                  aria-label="Facebook"
-                >
-                  <Facebook className="w-5 h-5" />
-                </a>
-                <a
-                  href="https://instagram.com/ferreteriaurkupina"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 bg-neutral-800 hover:bg-pink-600 rounded-full flex items-center justify-center transition-colors"
-                  aria-label="Instagram"
-                >
-                  <Instagram className="w-5 h-5" />
-                </a>
-                <a
-                  href="https://twitter.com/ferreteriaurkupina"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 bg-neutral-800 hover:bg-blue-400 rounded-full flex items-center justify-center transition-colors"
-                  aria-label="Twitter"
-                >
-                  <Twitter className="w-5 h-5" />
-                </a>
-                <a
-                  href="https://youtube.com/@ferreteriaurkupina"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 bg-neutral-800 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
-                  aria-label="YouTube"
-                >
-                  <Youtube className="w-5 h-5" />
-                </a>
-              </div>
-              <div className="mt-6">
-                <h4 className="font-semibold text-sm mb-2 text-white">Ferretería Urkupina</h4>
-                <p className="text-sm text-neutral-400 leading-relaxed">
-                  Somos tu ferretería de confianza en Guayaramerin.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Copyright */}
-          <div className="mt-8 pt-8 border-t border-neutral-800 text-center text-sm text-neutral-400">
-            <p>&copy; {new Date().getFullYear()} Ferretería Urkupina. Todos los derechos reservados.</p>
-          </div>
-        </div>
-      </footer>
     </>
   )
 }

@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
-import { ChevronDown, Loader2 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ChevronDown, Loader2, Heart } from "lucide-react"
 import { useCart } from "@/hooks/use-cart"
+import { useWishlist } from "@/lib/contexts/wishlist-context"
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
 import { productsService, type ProductListItem } from "@/lib/services/products-service"
@@ -47,31 +49,35 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
   const [total, setTotal] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(15)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedCategories, setSelectedCategories] = useState<Set<number>>(new Set())
   const [selectedBrands, setSelectedBrands] = useState<Set<number>>(new Set())
   const [priceRange, setPriceRange] = useState({ min: 0, max: 1000000 })
   const [sortBy, setSortBy] = useState("newest")
   const { add } = useCart()
+  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist()
   const { toasts, showToast, removeToast } = useToast()
+  const router = useRouter()
 
-  // Obtener categorías disponibles desde los productos (para filtros)
+  // Obtener categorías disponibles - usar todas las categorías del sistema
   const availableCategories = useMemo(() => {
-    const catMap = new Map<number, { id: number; nombre: string; count: number }>()
+    if (allCategories.length === 0) return []
+    
+    // Contar productos por categoría para mostrar el conteo
+    const catCountMap = new Map<number, number>()
     products.forEach((p) => {
-      if (p.categoria?.id && p.categoria?.nombre) {
-        const existing = catMap.get(p.categoria.id)
-        if (existing) {
-          existing.count++
-        } else {
-          catMap.set(p.categoria.id, {
-            id: p.categoria.id,
-            nombre: p.categoria.nombre,
-            count: 1,
-          })
-        }
+      if (p.categoria?.id) {
+        catCountMap.set(p.categoria.id, (catCountMap.get(p.categoria.id) || 0) + 1)
       }
     })
-    return Array.from(catMap.values())
-  }, [products])
+    
+    // Mapear todas las categorías con sus conteos
+    return allCategories.map(cat => ({
+      id: cat.id,
+      nombre: cat.nombre,
+      count: catCountMap.get(cat.id) || 0,
+    })).sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }, [allCategories, products])
 
   // Obtener marcas disponibles desde los productos
   const brands = useMemo(() => {
@@ -140,27 +146,40 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
       // Primero cargamos las categorías para obtener el ID
       const catId = await loadCategoryId()
       
-      if (!catId) {
-        console.warn(`⚠️ No se encontró ID de categoría para "${categorySlug}", mostrando todos los productos`)
-        // Si no encontramos la categoría, mostramos productos paginados
-        const response = await productsService.listProducts({
-          page: currentPage,
-          page_size: pageSize,
-        })
-        setProducts(response.items)
-        setTotal(response.total ?? 0)
-        setLoading(false)
-        return
+      // Determinar qué category_id usar: si hay categorías seleccionadas, usar la primera; si no, usar la categoría actual
+      let categoryIdToUse: number | undefined = undefined
+      if (selectedCategories.size > 0) {
+        // Si hay categorías seleccionadas, usar la primera
+        categoryIdToUse = Array.from(selectedCategories)[0]
+      } else if (catId) {
+        // Si no hay categorías seleccionadas pero hay una categoría actual, usarla
+        categoryIdToUse = catId
       }
-
-      console.log(`✅ Usando category_id: ${catId} para cargar productos`)
-
-      // Cargar productos filtrados por category_id con paginación
-      const response = await productsService.listProducts({
-        category_id: catId,
+      // Si no hay ninguna, categoryIdToUse será undefined y se mostrarán todos los productos
+      
+      // Construir parámetros de búsqueda
+      const params: {
+        page: number
+        page_size: number
+        category_id?: number
+        q?: string
+      } = {
         page: currentPage,
         page_size: pageSize,
-      })
+      }
+      
+      if (categoryIdToUse) {
+        params.category_id = categoryIdToUse
+      }
+      
+      if (searchQuery.trim()) {
+        params.q = searchQuery.trim()
+      }
+      
+      console.log(`✅ Cargando productos con parámetros:`, params)
+
+      // Cargar productos con filtros
+      const response = await productsService.listProducts(params)
       
       console.log(`📦 Página ${currentPage}: ${response.items.length} productos (Total: ${response.total})`)
       
@@ -172,11 +191,18 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
     } finally {
       setLoading(false)
     }
-  }, [categorySlug, loadCategoryId, currentPage, pageSize])
+  }, [categorySlug, loadCategoryId, currentPage, pageSize, searchQuery, selectedCategories])
 
   useEffect(() => {
     loadProducts()
   }, [loadProducts])
+  
+  // Resetear página cuando cambian los filtros o búsqueda
+  useEffect(() => {
+    if (currentPage !== 1) {
+      setCurrentPage(1)
+    }
+  }, [searchQuery, selectedCategories])
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
@@ -190,6 +216,18 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
     }))
   }
 
+  const toggleCategory = (categoryId: number) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(categoryId)) {
+        next.delete(categoryId)
+      } else {
+        next.add(categoryId)
+      }
+      return next
+    })
+  }
+
   const toggleBrand = (brandId: number) => {
     setSelectedBrands((prev) => {
       const next = new Set(prev)
@@ -200,6 +238,16 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
       }
       return next
     })
+  }
+  
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value)
+  }
+  
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setCurrentPage(1)
+    loadProducts()
   }
 
   // Productos filtrados
@@ -238,6 +286,10 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
   }, [products, selectedBrands, priceRange, sortBy])
 
   const handleAddToCart = (product: ProductListItem) => {
+    // No requiere autenticación para agregar al carrito
+    // El carrito funciona sin cuenta (se guarda en localStorage)
+    // Solo se requiere autenticación al finalizar la compra (checkout)
+    
     const variant = product.variantes?.[0]
     if (variant) {
       const price = Number(product.price ?? variant.precio ?? 0)
@@ -259,7 +311,7 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
       }, 1)
 
       // Mostrar notificación
-      showToast(`Producto "${name}" se agregó al carrito`)
+      showToast(`Producto "${name}" se agregó al carrito`, "success")
     }
   }
 
@@ -281,14 +333,15 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
             <h2 className="text-lg font-bold text-neutral-900 mb-6">Filtros</h2>
 
             {/* Search Box */}
-            <div className="mb-6">
+            <form onSubmit={handleSearchSubmit} className="mb-6">
               <input
                 type="text"
-                placeholder="Buscar"
-                className="w-full px-3 py-2 border border-neutral-200 rounded-md text-sm focus:outline-none focus:ring-1"
-                style={{ focusRing: "var(--storefront-brand)" }}
+                placeholder="Buscar productos..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+                className="w-full px-3 py-2 border border-neutral-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               />
-            </div>
+            </form>
 
             {/* Filter Sections */}
             {FILTERS.map((filter) => (
@@ -310,20 +363,25 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
                   <div className="mt-4 space-y-3 max-h-64 overflow-y-auto">
                     {availableCategories.length > 0 ? (
                       availableCategories.map((cat) => (
-                        <label key={cat.id} className="flex items-center gap-3 cursor-pointer transition-colors">
+                        <label 
+                          key={cat.id} 
+                          className="flex items-center gap-3 cursor-pointer transition-colors hover:text-orange-600"
+                          onClick={() => toggleCategory(cat.id)}
+                        >
                           <input
                             type="checkbox"
-                            className="w-4 h-4 rounded border-neutral-300"
-                            style={{ accentColor: "var(--storefront-brand)" }}
-                            checked={false}
-                            readOnly
+                            className="w-4 h-4 rounded border-neutral-300 text-orange-600 focus:ring-orange-500"
+                            checked={selectedCategories.has(cat.id)}
+                            onChange={() => toggleCategory(cat.id)}
                           />
-                          <span className="text-sm text-neutral-600">{cat.nombre}</span>
-                          <span className="text-xs text-neutral-400">({cat.count})</span>
+                          <span className="text-sm text-neutral-600 flex-1">{cat.nombre}</span>
+                          {cat.count > 0 && (
+                            <span className="text-xs text-neutral-400">({cat.count})</span>
+                          )}
                         </label>
                       ))
                     ) : (
-                      <p className="text-sm text-neutral-400">No hay categorías disponibles</p>
+                      <p className="text-sm text-neutral-400">Cargando categorías...</p>
                     )}
                   </div>
                 )}
@@ -394,7 +452,6 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-2xl font-bold text-neutral-900">{title}</h1>
-                <p className="text-sm text-neutral-500 mt-1">{description}</p>
               </div>
               <select
                 value={sortBy}
@@ -429,16 +486,27 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
               </div>
             ) : (
               <>
-                <p className="text-sm text-neutral-500 mb-4">
-                  Mostrando {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, total)} de {total} productos
+                <p className="text-sm text-neutral-600 mb-4">
+                  Mostrando <strong>{((currentPage - 1) * pageSize) + 1}</strong> - <strong>{Math.min(currentPage * pageSize, total)}</strong> de <strong>{total}</strong> productos
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredProducts.map((product) => {
                     const productPrice = Number(product.price ?? product.variantes?.[0]?.precio ?? 0)
                     const productImage = product.image || product.imagenes?.[0]?.url || "/placeholder.svg"
                     const productName = product.nombre || product.name || "Producto"
-                    const rawSlug = (product.slug || "").trim()
-                    const productSlug = String(product.id)
+                    // Usar slug del backend si está disponible, de lo contrario generar uno desde el nombre o usar ID
+                    let productSlug = (product.slug || "").trim()
+                    if (!productSlug || productSlug === "undefined" || productSlug === "null") {
+                      // Generar slug desde el nombre
+                      productSlug = productName
+                        .toLowerCase()
+                        .trim()
+                        .normalize("NFD")
+                        .replace(/[\u0300-\u036f]/g, "")
+                        .replace(/[^a-z0-9]+/g, "-")
+                        .replace(/^-+|-+$/g, "") || String(product.id)
+                    }
+                    const productHref = productSlug ? `/producto/${productSlug}` : `/producto/${product.id}?id=${product.id}`
                     const productBrand = product.marca?.nombre || ""
                     // Calcular descuento: todos los productos tienen un 20% de descuento simulado
                     // TODO: En el futuro, obtener descuentos reales desde promociones activas en la BD
@@ -490,13 +558,36 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
                             )}
                           </div>
                           <p className="text-xs text-neutral-400 mb-3">IVA incluido.</p>
-                          <button
-                            onClick={() => handleAddToCart(product)}
-                            className="w-full text-white font-bold py-2 px-3 rounded transition-colors text-sm hover:opacity-90"
-                            style={{ backgroundColor: "var(--storefront-cta)", color: "var(--storefront-text-primary)" }}
-                          >
-                            AÑADIR AL CARRO
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleAddToCart(product)}
+                              className="flex-1 text-white font-bold py-2 px-3 rounded transition-colors text-sm hover:opacity-90"
+                              style={{ backgroundColor: "var(--storefront-cta)", color: "var(--storefront-text-primary)" }}
+                            >
+                              AÑADIR AL CARRO
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                if (isInWishlist(product.id)) {
+                                  removeFromWishlist(product.id)
+                                  showToast("Producto eliminado de tu lista de deseos", "info")
+                                } else {
+                                  addToWishlist(product)
+                                  showToast("Producto agregado a tu lista de deseos", "success")
+                                }
+                              }}
+                              className={`p-2 rounded border-2 transition-colors ${
+                                isInWishlist(product.id)
+                                  ? "bg-red-50 border-red-600 text-red-600"
+                                  : "bg-white border-neutral-300 text-neutral-600 hover:border-red-600 hover:text-red-600"
+                              }`}
+                              aria-label={isInWishlist(product.id) ? "Eliminar de lista de deseos" : "Agregar a lista de deseos"}
+                            >
+                              <Heart className={`w-4 h-4 ${isInWishlist(product.id) ? "fill-current" : ""}`} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )
@@ -504,56 +595,63 @@ export default function CategoryPage({ categoryId: categorySlug, parentCategoryI
                 </div>
                 
                 {/* Paginación */}
-                {total > pageSize && (
-                  <div className="mt-8 flex items-center justify-center gap-2">
-                    <button
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className="px-4 py-2 border border-neutral-300 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 transition-colors"
-                    >
-                      Anterior
-                    </button>
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.ceil(total / pageSize) }, (_, i) => i + 1)
-                        .filter((page) => {
-                          // Mostrar primera página, última página, página actual y páginas adyacentes
+                {(() => {
+                  const maxPage = Math.ceil(total / pageSize)
+                  if (maxPage <= 1) return null
+                  
+                  return (
+                    <div className="mt-8 flex items-center justify-center gap-3">
+                      <button
+                        onClick={() => {
+                          const newPage = Math.max(1, currentPage - 1)
+                          handlePageChange(newPage)
+                        }}
+                        disabled={currentPage === 1}
+                        className="px-4 py-2 border border-neutral-300 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-100 transition-colors"
+                      >
+                        ← Anterior
+                      </button>
+                      <div className="flex items-center gap-2">
+                        {Array.from({ length: Math.min(maxPage, 7) }, (_, i) => {
+                          let pageNum: number
+                          if (maxPage <= 7) {
+                            pageNum = i + 1
+                          } else if (currentPage <= 4) {
+                            pageNum = i + 1
+                          } else if (currentPage >= maxPage - 3) {
+                            pageNum = maxPage - 6 + i
+                          } else {
+                            pageNum = currentPage - 3 + i
+                          }
+                          
                           return (
-                            page === 1 ||
-                            page === Math.ceil(total / pageSize) ||
-                            (page >= currentPage - 1 && page <= currentPage + 1)
-                          )
-                        })
-                        .map((page, index, array) => {
-                          // Agregar "..." si hay un gap
-                          const showEllipsis = index > 0 && page - array[index - 1] > 1
-                          return (
-                            <React.Fragment key={page}>
-                              {showEllipsis && (
-                                <span className="px-2 text-neutral-400">...</span>
-                              )}
-                              <button
-                                onClick={() => handlePageChange(page)}
-                                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                                  currentPage === page
-                                    ? "bg-orange-600 text-white"
-                                    : "border border-neutral-300 hover:bg-neutral-50"
-                                }`}
-                              >
-                                {page}
-                              </button>
-                            </React.Fragment>
+                            <button
+                              key={pageNum}
+                              onClick={() => handlePageChange(pageNum)}
+                              className={`px-3 py-2 min-w-[40px] rounded-lg transition-colors font-medium ${
+                                currentPage === pageNum
+                                  ? "bg-orange-600 text-white"
+                                  : "border border-neutral-300 text-neutral-700 hover:bg-neutral-100"
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
                           )
                         })}
+                      </div>
+                      <button
+                        onClick={() => {
+                          const newPage = Math.min(maxPage, currentPage + 1)
+                          handlePageChange(newPage)
+                        }}
+                        disabled={currentPage >= maxPage}
+                        className="px-4 py-2 border border-neutral-300 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-100 transition-colors"
+                      >
+                        Siguiente →
+                      </button>
                     </div>
-                    <button
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage >= Math.ceil(total / pageSize)}
-                      className="px-4 py-2 border border-neutral-300 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 transition-colors"
-                    >
-                      Siguiente
-                    </button>
-                  </div>
-                )}
+                  )
+                })()}
               </>
             )}
           </div>

@@ -8,16 +8,37 @@ export function ToastContainer() {
   const { toasts, removeToast } = useToast()
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
-      <AnimatePresence>
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none">
+      <AnimatePresence mode="popLayout" initial={false}>
         {toasts.map((toast) => (
           <motion.div
             key={toast.id}
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            transition={{ duration: 0.3 }}
-            className="bg-white border border-neutral-200 rounded-lg shadow-xl p-4 min-w-[300px] max-w-md flex items-start gap-3"
+            initial={{ opacity: 0, x: 400, scale: 0.8, y: 20 }}
+            animate={{ 
+              opacity: 1, 
+              x: 0, 
+              scale: 1, 
+              y: 0,
+              transition: {
+                type: "spring",
+                stiffness: 400,
+                damping: 25,
+                mass: 0.8
+              }
+            }}
+            exit={{ 
+              opacity: 0, 
+              x: 400, 
+              scale: 0.8, 
+              y: 20,
+              transition: {
+                type: "spring",
+                stiffness: 400,
+                damping: 25,
+                mass: 0.8
+              }
+            }}
+            className="bg-white border border-neutral-200 rounded-lg shadow-xl p-4 min-w-[300px] max-w-md flex items-start gap-3 pointer-events-auto"
           >
             {/* Icon */}
             <div className="flex-shrink-0 mt-0.5">

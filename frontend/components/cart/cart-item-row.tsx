@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { motion } from "framer-motion"
 import { Trash2, Plus, Minus } from "lucide-react"
 import { useCart } from "@/hooks/use-cart"
 import type { CartItem } from "@/lib/contexts/cart-context"
@@ -37,30 +38,39 @@ export function CartItemRow({ item }: { item: CartItem }) {
       {/* Quantity & Actions */}
       <div className="flex flex-col items-end gap-2">
         <div className="flex items-center gap-1 border border-neutral-300 rounded-md bg-white">
-          <button
+          <motion.button
             onClick={() => updateQty(item.variantId, item.qty - 1)}
             className="p-1 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1 rounded"
             aria-label={`Reducir cantidad de ${item.name}`}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
             <Minus className="w-3.5 h-3.5 text-neutral-600" />
-          </button>
+          </motion.button>
           <span className="w-6 text-center text-sm font-medium">{item.qty}</span>
-          <button
+          <motion.button
             onClick={() => updateQty(item.variantId, item.qty + 1)}
             className="p-1 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1 rounded"
             aria-label={`Aumentar cantidad de ${item.name}`}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
             <Plus className="w-3.5 h-3.5 text-neutral-600" />
-          </button>
+          </motion.button>
         </div>
 
-        <button
+        <motion.button
           onClick={() => remove(item.variantId)}
           className="p-1 text-neutral-500 hover:text-red-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 rounded"
           aria-label={`Eliminar ${item.name} del carrito`}
+          whileHover={{ scale: 1.1, rotate: 10 }}
+          whileTap={{ scale: 0.9 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
         >
           <Trash2 className="w-4 h-4" />
-        </button>
+        </motion.button>
       </div>
     </div>
   )
