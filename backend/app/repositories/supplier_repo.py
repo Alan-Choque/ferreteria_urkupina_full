@@ -35,17 +35,32 @@ class SupplierRepository:
         return stmt
 
     def list(self, filters: SupplierFilter, page: int, page_size: int) -> tuple[list[Proveedor], int]:
-        stmt = self._apply_filters(self._base_stmt().order_by(Proveedor.nombre.asc()), filters)
+        from sqlalchemy.orm import joinedload
+        stmt = (
+            self._apply_filters(self._base_stmt().order_by(Proveedor.nombre.asc()), filters)
+            .options(
+                joinedload(Proveedor.productos),
+                joinedload(Proveedor.contactos),
+            )
+        )
         total_stmt = self._apply_filters(select(func.count()).select_from(Proveedor), filters)
         total = self._db.scalar(total_stmt) or 0
         rows: Sequence[Proveedor] = self._db.scalars(
             stmt.offset((page - 1) * page_size).limit(page_size)
-        ).all()
+        ).unique().all()
         return list(rows), total
 
     def get(self, supplier_id: int) -> Proveedor | None:
-        stmt = self._base_stmt().where(Proveedor.id == supplier_id)
-        return self._db.scalars(stmt).first()
+        from sqlalchemy.orm import joinedload
+        stmt = (
+            self._base_stmt()
+            .where(Proveedor.id == supplier_id)
+            .options(
+                joinedload(Proveedor.productos),
+                joinedload(Proveedor.contactos),
+            )
+        )
+        return self._db.scalars(stmt).unique().first()
 
     def create(self, data: dict) -> Proveedor:
         supplier = Proveedor(

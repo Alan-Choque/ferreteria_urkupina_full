@@ -52,3 +52,45 @@ class ReservationRepository:
         stmt = self._base_stmt().where(Reserva.id == reservation_id)
         return self._db.scalars(stmt).first()
 
+    def create(
+        self,
+        cliente_id: int,
+        items: list[dict],
+        usuario_id: Optional[int] = None,
+        fecha_reserva: Optional[datetime] = None,
+        observaciones: Optional[str] = None,
+    ) -> Reserva:
+        from datetime import datetime
+        from decimal import Decimal
+        from app.models.reserva import ItemReserva
+
+        reserva = Reserva(
+            cliente_id=cliente_id,
+            fecha_reserva=fecha_reserva or datetime.now(),
+            estado="PENDIENTE",
+            usuario_id=usuario_id,
+            observaciones=observaciones,
+        )
+        self._db.add(reserva)
+        self._db.flush()
+
+        for item_data in items:
+            item = ItemReserva(
+                reserva_id=reserva.id,
+                variante_producto_id=item_data["variante_producto_id"],
+                cantidad=Decimal(str(item_data["cantidad"])),
+            )
+            self._db.add(item)
+
+        self._db.commit()
+        self._db.refresh(reserva)
+        return reserva
+
+    def update(self, reserva: Reserva, data: dict) -> Reserva:
+        for key, value in data.items():
+            if hasattr(reserva, key):
+                setattr(reserva, key, value)
+        self._db.commit()
+        self._db.refresh(reserva)
+        return reserva
+

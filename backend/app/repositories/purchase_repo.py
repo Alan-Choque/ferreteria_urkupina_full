@@ -52,3 +52,64 @@ class PurchaseRepository:
         stmt = self._base_stmt().where(OrdenCompra.id == order_id)
         return self._db.scalars(stmt).first()
 
+    def create(
+        self,
+        proveedor_id: int,
+        items: list[dict],
+        estado: str = "BORRADOR",
+        usuario_id: Optional[int] = None,
+        observaciones: Optional[str] = None,
+    ) -> OrdenCompra:
+        from datetime import datetime
+        from decimal import Decimal
+        from app.models.compra import ItemOrdenCompra
+
+        orden = OrdenCompra(
+            proveedor_id=proveedor_id,
+            fecha=datetime.now(),
+            estado=estado,
+            usuario_id=usuario_id,
+            observaciones=observaciones,
+        )
+        self._db.add(orden)
+        self._db.flush()
+
+        for item_data in items:
+            item = ItemOrdenCompra(
+                orden_compra_id=orden.id,
+                variante_producto_id=item_data["variante_producto_id"],
+                cantidad=Decimal(str(item_data["cantidad"])),
+                precio_unitario=Decimal(str(item_data["precio_unitario"])) if item_data.get("precio_unitario") else None,
+            )
+            self._db.add(item)
+
+        self._db.commit()
+        self._db.refresh(orden)
+        return orden
+
+    def update(self, orden: OrdenCompra, data: dict) -> OrdenCompra:
+        from decimal import Decimal
+        from app.models.compra import ItemOrdenCompra
+
+        if "proveedor_id" in data:
+            orden.proveedor_id = data["proveedor_id"]
+        if "observaciones" in data:
+            orden.observaciones = data["observaciones"]
+        if "items" in data:
+            # Eliminar items existentes
+            for item in orden.items:
+                self._db.delete(item)
+            # Agregar nuevos items
+            for item_data in data["items"]:
+                item = ItemOrdenCompra(
+                    orden_compra_id=orden.id,
+                    variante_producto_id=item_data["variante_producto_id"],
+                    cantidad=Decimal(str(item_data["cantidad"])),
+                    precio_unitario=Decimal(str(item_data["precio_unitario"])) if item_data.get("precio_unitario") else None,
+                )
+                self._db.add(item)
+
+        self._db.commit()
+        self._db.refresh(orden)
+        return orden
+

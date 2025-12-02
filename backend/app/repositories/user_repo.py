@@ -25,8 +25,15 @@ class UserRepository:
     def __init__(self, db: Session):
         self._db = db
 
-    def _base_stmt(self):
-        return select(Usuario).options(joinedload(Usuario.roles))
+    def _base_stmt(self, eager_load_roles: bool = True):
+        """Crea el statement base, opcionalmente con eager loading de roles."""
+        stmt = select(Usuario)
+        if eager_load_roles:
+            try:
+                stmt = stmt.options(joinedload(Usuario.roles))
+            except Exception as e:
+                logger.warning(f"Error al configurar joinedload para roles: {e}, continuando sin eager loading")
+        return stmt
 
     def _apply_filters(self, stmt, filters: UserFilter):
         conditions = []
@@ -42,14 +49,34 @@ class UserRepository:
         return stmt
 
     def list(self, filters: UserFilter, page: int, page_size: int) -> tuple[list[Usuario], int]:
-        stmt = self._apply_filters(self._base_stmt(), filters).order_by(Usuario.id.asc())
-        total_stmt = self._apply_filters(select(func.count()).select_from(Usuario), filters)
-        total = self._db.scalar(total_stmt) or 0
-        result = self._db.scalars(
-            stmt.offset((page - 1) * page_size).limit(page_size)
-        )
-        users: Sequence[Usuario] = result.unique().all()
-        return list(users), total
+        try:
+            # Intentar primero con eager loading de roles
+            try:
+                stmt = self._apply_filters(self._base_stmt(eager_load_roles=True), filters).order_by(Usuario.id.asc())
+            except Exception:
+                # Si falla, intentar sin eager loading
+                logger.warning("Fallando back a consulta sin eager loading de roles")
+                stmt = self._apply_filters(self._base_stmt(eager_load_roles=False), filters).order_by(Usuario.id.asc())
+            
+            total_stmt = self._apply_filters(select(func.count()).select_from(Usuario), filters)
+            total = self._db.scalar(total_stmt) or 0
+            
+            result = self._db.scalars(
+                stmt.offset((page - 1) * page_size).limit(page_size)
+            )
+            
+            # Intentar usar unique() si es posible, si no, usar all() directamente
+            try:
+                users: Sequence[Usuario] = result.unique().all()
+            except Exception as unique_error:
+                logger.warning(f"Error con unique(), usando all() directamente: {unique_error}")
+                # Si unique() falla, intentar sin unique
+                users: Sequence[Usuario] = result.all()
+            
+            return list(users), total
+        except Exception as e:
+            logger.error(f"Error en UserRepository.list: {type(e).__name__}: {str(e)}", exc_info=True)
+            raise
 
     def list_roles(self) -> list[Rol]:
         stmt = select(Rol).order_by(Rol.nombre.asc())
