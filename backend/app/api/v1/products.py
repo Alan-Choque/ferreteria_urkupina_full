@@ -25,7 +25,13 @@ def list_products_endpoint(
     service: ProductService = Depends(get_product_service),
 ):
     """Lista productos con filtros y paginación."""
-    return service.list_products(q, brand_id, category_id, status, page, page_size)
+    try:
+        return service.list_products(q, brand_id, category_id, status, page, page_size)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in list_products_endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error al cargar productos: {str(e)}")
 
 
 @router.get("/{slug}", response_model=ProductResponse)

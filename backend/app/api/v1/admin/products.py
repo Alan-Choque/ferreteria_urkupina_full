@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import require_role
+from app.core.dependencies import require_role, require_product_management
 from app.db.session import get_db
 from app.schemas.product import (
     ProductCreateRequest,
@@ -31,18 +31,24 @@ def list_products_admin(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     service: ProductService = Depends(get_product_service),
-    _: None = Depends(require_role("ADMIN")),
+    _: None = Depends(require_product_management()),
 ):
-    """Listado administrativo de productos."""
+    """Listado administrativo de productos.
+    
+    Permisos: ADMIN
+    """
     return service.list_products(q, brand_id, category_id, status_filter, page, page_size)
 
 
 @router.get("/meta", response_model=ProductMetaResponse)
 def fetch_products_meta(
     service: ProductService = Depends(get_product_service),
-    _: None = Depends(require_role("ADMIN")),
+    _: None = Depends(require_product_management()),
 ):
-    """Obtiene catálogos auxiliares para formularios (marcas, categorías, unidades)."""
+    """Obtiene catálogos auxiliares para formularios (marcas, categorías, unidades).
+    
+    Permisos: ADMIN
+    """
     return service.fetch_meta()
 
 
@@ -50,9 +56,12 @@ def fetch_products_meta(
 def create_product_admin(
     payload: ProductCreateRequest,
     service: ProductService = Depends(get_product_service),
-    _: None = Depends(require_role("ADMIN")),
+    _: None = Depends(require_product_management()),
 ):
-    """Crea un nuevo producto con variantes e imágenes."""
+    """Crea un nuevo producto con variantes e imágenes.
+    
+    Permisos: ADMIN
+    """
     try:
         return service.create_product(payload)
     except ValueError as exc:  # Validation at service level
@@ -63,8 +72,12 @@ def create_product_admin(
 def get_product_admin(
     product_id: int,
     service: ProductService = Depends(get_product_service),
-    _: None = Depends(require_role("ADMIN")),
+    _: None = Depends(require_product_management()),
 ):
+    """Obtiene un producto por ID.
+    
+    Permisos: ADMIN
+    """
     producto = service.get_product_by_id(product_id)
     if not producto:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
@@ -76,8 +89,12 @@ def update_product_admin(
     product_id: int,
     payload: ProductUpdateRequest,
     service: ProductService = Depends(get_product_service),
-    _: None = Depends(require_role("ADMIN")),
+    _: None = Depends(require_product_management()),
 ):
+    """Actualiza un producto.
+    
+    Permisos: ADMIN
+    """
     try:
         return service.update_product(product_id, payload)
     except ValueError as exc:
@@ -89,8 +106,12 @@ def change_product_status_admin(
     product_id: int,
     payload: ProductStatusUpdateRequest,
     service: ProductService = Depends(get_product_service),
-    _: None = Depends(require_role("ADMIN")),
+    _: None = Depends(require_product_management()),
 ):
+    """Cambia el estado de un producto.
+    
+    Permisos: ADMIN
+    """
     try:
         return service.set_product_status(product_id, payload)
     except ValueError as exc:

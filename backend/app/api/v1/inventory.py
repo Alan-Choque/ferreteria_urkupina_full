@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import require_role
+from app.core.dependencies import require_role, require_inventory_view, require_stock_update
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.inventory import (
@@ -27,8 +27,12 @@ def get_inventory_service(db: Session = Depends(get_db)) -> InventoryService:
 def get_stock_by_variant(
     variant_id: int,
     service: InventoryService = Depends(get_inventory_service),
+    _: Usuario = Depends(require_inventory_view()),
 ):
-    """Obtiene el stock de una variante en todos los almacenes."""
+    """Obtiene el stock de una variante en todos los almacenes.
+    
+    Permisos: ADMIN, INVENTARIOS, SUPERVISOR
+    """
     try:
         stock = service.stock_by_variant(variant_id)
     except ValueError as exc:
@@ -39,18 +43,24 @@ def get_stock_by_variant(
 @router.get("/stock", response_model=list[StockSummary])
 def get_stock_summary(
     service: InventoryService = Depends(get_inventory_service),
-    _: object = Depends(require_role("ADMIN")),
+    _: Usuario = Depends(require_inventory_view()),
 ):
-    """Lista el stock consolidado por producto/variante y almacén."""
+    """Lista el stock consolidado por producto/variante y almacén.
+    
+    Permisos: ADMIN, INVENTARIOS, SUPERVISOR
+    """
     return service.list_stock_summary()
 
 
 @router.get("/warehouses", response_model=list[WarehouseResponse])
 def list_warehouses(
     service: InventoryService = Depends(get_inventory_service),
-    _: object = Depends(require_role("ADMIN")),
+    _: Usuario = Depends(require_inventory_view()),
 ):
-    """Obtiene la lista de almacenes disponibles."""
+    """Obtiene la lista de almacenes disponibles.
+    
+    Permisos: ADMIN, INVENTARIOS, SUPERVISOR
+    """
     return service.list_warehouses()
 
 
@@ -59,9 +69,12 @@ def search_variants(
     q: str = Query(..., min_length=2, description="Texto de búsqueda (nombre de producto o variante)"),
     limit: int = Query(20, ge=1, le=100),
     service: InventoryService = Depends(get_inventory_service),
-    _: object = Depends(require_role("ADMIN")),
+    _: Usuario = Depends(require_inventory_view()),
 ):
-    """Busca variantes de producto para operaciones de inventario."""
+    """Busca variantes de producto para operaciones de inventario.
+    
+    Permisos: ADMIN, INVENTARIOS, SUPERVISOR
+    """
     return service.search_variants(q, limit=limit)
 
 
@@ -69,9 +82,12 @@ def search_variants(
 def register_inventory_entry(
     payload: InventoryEntryRequest,
     service: InventoryService = Depends(get_inventory_service),
-    current_user: Usuario = Depends(require_role("ADMIN")),
+    current_user: Usuario = Depends(require_stock_update()),
 ):
-    """Registra ingresos manuales de inventario."""
+    """Registra ingresos manuales de inventario.
+    
+    Permisos: ADMIN, INVENTARIOS
+    """
     return service.register_entry(payload, getattr(current_user, "id", None))
 
 
@@ -79,9 +95,12 @@ def register_inventory_entry(
 def transfer_inventory(
     payload: InventoryTransferRequest,
     service: InventoryService = Depends(get_inventory_service),
-    current_user: Usuario = Depends(require_role("ADMIN")),
+    current_user: Usuario = Depends(require_stock_update()),
 ):
-    """Registra transferencias de stock entre almacenes."""
+    """Registra transferencias de stock entre almacenes.
+    
+    Permisos: ADMIN, INVENTARIOS
+    """
     return service.transfer_stock(payload, getattr(current_user, "id", None))
 
 
@@ -89,7 +108,10 @@ def transfer_inventory(
 def adjust_inventory(
     payload: InventoryAdjustmentRequest,
     service: InventoryService = Depends(get_inventory_service),
-    current_user: Usuario = Depends(require_role("ADMIN")),
+    current_user: Usuario = Depends(require_stock_update()),
 ):
-    """Realiza ajustes de inventario a partir de conteos físicos u otros eventos."""
+    """Realiza ajustes de inventario a partir de conteos físicos u otros eventos.
+    
+    Permisos: ADMIN, INVENTARIOS
+    """
     return service.adjust_stock(payload, getattr(current_user, "id", None))
