@@ -5,7 +5,9 @@ from app.api.v1 import (
     categories,
     customers,
     files,
+    invoices,
     inventory,
+    payments,
     products,
     promotions,
     purchases,
@@ -27,6 +29,8 @@ api_router.include_router(inventory.router, prefix="/inventory", tags=["inventor
 api_router.include_router(suppliers.router, prefix="/suppliers", tags=["suppliers"])
 api_router.include_router(purchases.router, prefix="/purchases", tags=["purchases"])
 api_router.include_router(sales.router, prefix="/sales", tags=["sales"])
+api_router.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
+api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
 api_router.include_router(promotions.router, prefix="/promotions", tags=["promotions"])
 api_router.include_router(reservations.router, prefix="/reservations", tags=["reservations"])
 api_router.include_router(files.router, prefix="/files", tags=["files"])
