@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { purchasesService } from "@/lib/services/purchases-service"
 import { suppliersService } from "@/lib/services/suppliers-service"
 import { productsService } from "@/lib/services/products-service"
-import { Loader2, X, FilePlus, ArrowLeft } from "lucide-react"
+import { Loader2, X, FilePlus, ArrowLeft, Save } from "lucide-react"
+import type { PurchaseOrder } from "@/lib/types/admin"
 import type { AdminSupplier } from "@/lib/services/suppliers-service"
 import type { ProductListItem } from "@/lib/services/products-service"
 
@@ -17,10 +18,15 @@ const PURPLE_COLORS = {
   accent: "#EDE9FE",
 }
 
-export default function PurchaseCreatePage() {
+export default function PurchaseEditPage() {
   const router = useRouter()
+  const params = useParams()
+  const orderId = parseInt(params.id as string)
+  
+  const [order, setOrder] = useState<PurchaseOrder | null>(null)
   const [suppliers, setSuppliers] = useState<AdminSupplier[]>([])
   const [products, setProducts] = useState<ProductListItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [loadingSuppliers, setLoadingSuppliers] = useState(false)
   const [loadingProducts, setLoadingProducts] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -40,25 +46,45 @@ export default function PurchaseCreatePage() {
 
   useEffect(() => {
     const loadData = async () => {
-      setLoadingSuppliers(true)
-      setLoadingProducts(true)
+      setLoading(true)
       try {
-        const [suppliersData, productsData] = await Promise.all([
+        const [orderData, suppliersData, productsData] = await Promise.all([
+          purchasesService.getPO(orderId),
           suppliersService.listSuppliers(),
           productsService.listProducts({ page: 1, page_size: 100 }),
         ])
+        
+        if (orderData.status !== "borrador") {
+          setError("Solo se pueden editar órdenes en estado BORRADOR")
+          return
+        }
+        
+        setOrder(orderData)
         setSuppliers(suppliersData)
         setProducts(productsData.items)
+        
+        // Cargar datos del formulario desde la orden
+        setFormData({
+          supplierId: typeof orderData.supplierId === "number" ? String(orderData.supplierId) : "",
+          items: orderData.items.map(item => ({
+            variantId: String(item.productId), // productId es variante_producto_id
+            productId: item.productId,
+            productName: `Item ${item.id}`,
+            variantName: "Variante",
+            qty: String(item.qty),
+            price: String(item.price),
+          })),
+          observaciones: orderData.observaciones || "",
+        })
       } catch (err) {
         console.error("Error loading data:", err)
         setError(err instanceof Error ? err.message : "Error al cargar datos")
       } finally {
-        setLoadingSuppliers(false)
-        setLoadingProducts(false)
+        setLoading(false)
       }
     }
     void loadData()
-  }, [])
+  }, [orderId])
 
   const handleAddItem = () => {
     const firstProduct = products[0]
@@ -103,7 +129,7 @@ export default function PurchaseCreatePage() {
         precio_unitario: item.price ? Number(item.price) : null,
       }))
 
-      await purchasesService.createPO({
+      await purchasesService.updatePO(orderId, {
         proveedor_id: Number(formData.supplierId),
         items,
         observaciones: formData.observaciones || null,
@@ -111,11 +137,35 @@ export default function PurchaseCreatePage() {
 
       router.push("/admin/purchases?action=list")
     } catch (err) {
-      console.error("Error creating purchase order", err)
-      setError(err instanceof Error ? err.message : "No se pudo crear la orden de compra")
+      console.error("Error updating purchase order", err)
+      setError(err instanceof Error ? err.message : "No se pudo actualizar la orden de compra")
     } finally {
       setSaving(false)
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="animate-spin" size={32} style={{ color: PURPLE_COLORS.primary }} />
+      </div>
+    )
+  }
+
+  if (error && !order) {
+    return (
+      <div className="p-6">
+        <button
+          onClick={() => router.push("/admin/purchases")}
+          className="mb-4 flex items-center gap-2 text-sm hover:opacity-80"
+          style={{ color: PURPLE_COLORS.primary }}
+        >
+          <ArrowLeft size={16} />
+          Volver a compras
+        </button>
+        <div className="text-center py-12 text-red-500">{error}</div>
+      </div>
+    )
   }
 
   return (
@@ -131,10 +181,10 @@ export default function PurchaseCreatePage() {
         </button>
         <div>
           <h1 className="text-3xl font-bold" style={{ color: PURPLE_COLORS.dark }}>
-            Nueva orden de compra
+            Editar orden de compra #{orderId}
           </h1>
           <p className="text-sm mt-1" style={{ color: "#6B7280" }}>
-            Crea una nueva orden de compra para un proveedor
+            Modifica los productos y cantidades de la orden
           </p>
         </div>
       </div>
@@ -301,11 +351,12 @@ export default function PurchaseCreatePage() {
             className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-white transition-colors"
             style={{ backgroundColor: PURPLE_COLORS.primary }}
           >
-            {saving ? <Loader2 className="animate-spin h-4 w-4" /> : <FilePlus size={16} />}
-            Crear orden
+            {saving ? <Loader2 className="animate-spin h-4 w-4" /> : <Save size={16} />}
+            Guardar cambios
           </button>
         </div>
       </form>
     </div>
   )
 }
+
