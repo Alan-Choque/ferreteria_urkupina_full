@@ -36,6 +36,11 @@ class UserService:
 
     def __post_init__(self) -> None:
         self._repo = UserRepository(self.db)
+    
+    @property
+    def db_session(self) -> Session:
+        """Propiedad para acceder a la sesión de DB desde métodos estáticos si es necesario"""
+        return self.db
 
     # -------------------------------------------------------------------------
     # Registro (autoregistro) con idempotencia
@@ -68,6 +73,7 @@ class UserService:
                     Token(**payload["token"]),
                 )
 
+        # Verificar si el email ya existe como usuario o cliente
         if existing := self._repo.get_by_email(request_data.email):
             self._record_idempotent_error(
                 idempotency_key,
@@ -75,12 +81,30 @@ class UserService:
                 request_method,
                 request_data,
                 status.HTTP_409_CONFLICT,
-                code="USER_ALREADY_EXISTS",
-                message="El correo electrónico ya está registrado",
+                code="EMAIL_ALREADY_REGISTERED",
+                message="Este correo electrónico ya está registrado. Si ya tienes una cuenta, intenta iniciar sesión.",
             )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"error": {"code": "USER_ALREADY_EXISTS", "message": "El correo electrónico ya está registrado"}},
+                detail={"error": {"code": "EMAIL_ALREADY_REGISTERED", "message": "Este correo electrónico ya está registrado. Si ya tienes una cuenta, intenta iniciar sesión."}},
+            )
+        
+        # Verificar también si existe como cliente (aunque no debería ser necesario si el email es único)
+        from app.models.cliente import Cliente
+        existing_cliente = self.db.query(Cliente).filter(Cliente.correo == request_data.email).first()
+        if existing_cliente:
+            self._record_idempotent_error(
+                idempotency_key,
+                request_path,
+                request_method,
+                request_data,
+                status.HTTP_409_CONFLICT,
+                code="EMAIL_ALREADY_REGISTERED",
+                message="Este correo electrónico ya está registrado como cliente. Si ya tienes una cuenta, intenta iniciar sesión.",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error": {"code": "EMAIL_ALREADY_REGISTERED", "message": "Este correo electrónico ya está registrado como cliente. Si ya tienes una cuenta, intenta iniciar sesión."}},
             )
 
         try:
@@ -93,39 +117,72 @@ class UserService:
             
             # Crear también un cliente asociado al usuario registrado
             # Esto permite que el cliente pueda hacer pedidos y reservas
+            # MEJORADO: Ahora usamos la relación directa usuario_id en lugar de solo email
             from datetime import datetime
             try:
-                cliente = Cliente(
-                    nombre=request_data.username,
-                    correo=request_data.email,
-                    nit_ci=request_data.nit_ci,
-                    telefono=request_data.telefono,
-                    fecha_registro=datetime.utcnow(),
-                )
-                self.db.add(cliente)
-                self.db.commit()
-                self.db.refresh(cliente)
-            except IntegrityError:
-                # Si el cliente ya existe (mismo correo), continuar sin error
+                # Normalizar email para almacenamiento consistente
+                email_normalizado = request_data.email.strip().lower()
+                
+                # Verificar si ya existe un cliente con este email
+                existing_cliente = self.db.query(Cliente).filter(
+                    Cliente.correo == email_normalizado
+                ).first()
+                
+                if existing_cliente:
+                    # Si existe, actualizar su usuario_id para vincularlo
+                    if not existing_cliente.usuario_id:
+                        existing_cliente.usuario_id = user.id
+                        existing_cliente.nombre = request_data.username
+                        if request_data.nit_ci:
+                            existing_cliente.nit_ci = request_data.nit_ci
+                        if request_data.telefono:
+                            existing_cliente.telefono = request_data.telefono
+                        self.db.commit()
+                        logger.info(f"Cliente existente {existing_cliente.id} vinculado al usuario {user.id}")
+                    else:
+                        logger.info(f"Cliente {existing_cliente.id} ya tiene usuario asociado")
+                else:
+                    # Crear nuevo cliente vinculado al usuario
+                    cliente = Cliente(
+                        nombre=request_data.username,
+                        correo=email_normalizado,
+                        nit_ci=request_data.nit_ci,
+                        telefono=request_data.telefono,
+                        fecha_registro=datetime.utcnow(),
+                        usuario_id=user.id,  # VINCULACIÓN DIRECTA
+                    )
+                    self.db.add(cliente)
+                    self.db.commit()
+                    self.db.refresh(cliente)
+                    logger.info(f"Cliente {cliente.id} creado y vinculado al usuario {user.id}")
+            except IntegrityError as e:
+                # Si el cliente ya existe (mismo correo o mismo usuario_id), continuar sin error
                 self.db.rollback()
-                logger.info("Cliente ya existe para correo %s, continuando con registro de usuario", request_data.email)
+                logger.info("Cliente ya existe para correo %s o usuario %s, continuando", request_data.email, user.id)
             
-        except IntegrityError:
+        except IntegrityError as e:
+            # Determinar qué campo causó el error
+            error_msg = "El correo electrónico o nombre de usuario ya está registrado"
+            if "correo" in str(e).lower() or "email" in str(e).lower():
+                error_msg = "Este correo electrónico ya está registrado. Si ya tienes una cuenta, intenta iniciar sesión."
+            elif "nombre_usuario" in str(e).lower() or "username" in str(e).lower():
+                error_msg = "Este nombre de usuario ya está en uso. Por favor, elige otro."
+            
             self._record_idempotent_error(
                 idempotency_key,
                 request_path,
                 request_method,
                 request_data,
                 status.HTTP_409_CONFLICT,
-                code="USER_ALREADY_EXISTS",
-                message="El correo electrónico o nombre de usuario ya está registrado",
+                code="EMAIL_ALREADY_REGISTERED",
+                message=error_msg,
             )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "error": {
-                        "code": "USER_ALREADY_EXISTS",
-                        "message": "El correo electrónico o nombre de usuario ya está registrado",
+                        "code": "EMAIL_ALREADY_REGISTERED",
+                        "message": error_msg,
                     }
                 },
             )
@@ -142,16 +199,59 @@ class UserService:
                 response_body={"user": response.model_dump(), "token": token.model_dump()},
                 request_body=request_data.model_dump(),
             )
+            return response, token
+        
         return response, token
 
     # -------------------------------------------------------------------------
     # Consultas administrativas
     # -------------------------------------------------------------------------
     def list_users(self, *, search: str | None, active: bool | None, page: int, page_size: int) -> UserListResponse:
-        filters = UserFilter(search=search, active=active)
-        users, total = self._repo.list(filters, page, page_size)
-        items = [self._map_user_summary(user) for user in users]
-        return UserListResponse(items=items, total=total, page=page, page_size=page_size)
+        try:
+            filters = UserFilter(search=search, active=active)
+            users, total = self._repo.list(filters, page, page_size)
+            items = []
+            for user in users:
+                try:
+                    # Intentar mapear el usuario normalmente
+                    items.append(self._map_user_summary(user))
+                except Exception as e:
+                    logger.error(f"Error mapeando usuario {user.id}: {e}", exc_info=True)
+                    # Si falla, intentar crear un usuario con datos mínimos
+                    try:
+                        # Intentar obtener roles de forma segura
+                        roles_list = []
+                        if hasattr(user, 'roles'):
+                            try:
+                                # Intentar cargar roles explícitamente
+                                self.db.refresh(user, ['roles'])
+                                roles_list = [rol.nombre for rol in (user.roles or [])]
+                            except Exception as refresh_error:
+                                # Si refresh falla, intentar acceder directamente
+                                try:
+                                    roles_list = [rol.nombre for rol in (user.roles or [])]
+                                except Exception:
+                                    # Si todo falla, dejar roles vacío
+                                    logger.warning(f"No se pudieron cargar roles para usuario {user.id}: {refresh_error}")
+                                    roles_list = []
+                        
+                        items.append(UserSummary(
+                            id=user.id,
+                            nombre_usuario=getattr(user, 'nombre_usuario', 'N/A') or "N/A",
+                            correo=getattr(user, 'correo', 'N/A') or "N/A",
+                            activo=bool(getattr(user, 'activo', False)),
+                            roles=roles_list,
+                        ))
+                    except Exception as fallback_error:
+                        logger.error(f"Error incluso en fallback para usuario {getattr(user, 'id', 'unknown')}: {fallback_error}")
+                        continue
+            return UserListResponse(items=items, total=total, page=page, page_size=page_size)
+        except Exception as e:
+            logger.error(f"Error en list_users: {type(e).__name__}: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error al listar usuarios: {str(e)}"
+            ) from e
 
     def get_user(self, user_id: int) -> UserResponse:
         user = self._repo.get_by_id(user_id)
@@ -164,6 +264,21 @@ class UserService:
         return [RoleResponse(id=role.id, nombre=role.nombre, descripcion=role.descripcion) for role in roles]
 
     def create_user(self, payload: UserCreateRequest) -> UserResponse:
+        # Verificar si el email o username ya existen antes de intentar crear
+        existing_email = self._repo.get_by_email(payload.email)
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error": {"code": "EMAIL_ALREADY_EXISTS", "message": "Este correo electrónico ya está registrado. Por favor, usa otro correo."}},
+            )
+        
+        existing_username = self._repo.get_by_username(payload.username)
+        if existing_username:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error": {"code": "USERNAME_ALREADY_EXISTS", "message": "Este nombre de usuario ya está en uso. Por favor, elige otro."}},
+            )
+        
         try:
             user = self._repo.create(
                 nombre_usuario=payload.username,
@@ -172,11 +287,17 @@ class UserService:
                 activo=payload.activo,
                 roles=payload.role_ids,
             )
-        except IntegrityError:
+        except IntegrityError as e:
+            # Si aún así hay un IntegrityError (por ejemplo, por constraint de DB), usar el mensaje del error
+            error_msg = str(e.orig) if hasattr(e, 'orig') and e.orig else "El usuario ya existe"
+            if "correo" in error_msg.lower() or "email" in error_msg.lower():
+                error_msg = "Este correo electrónico ya está registrado. Por favor, usa otro correo."
+            elif "nombre_usuario" in error_msg.lower() or "username" in error_msg.lower():
+                error_msg = "Este nombre de usuario ya está en uso. Por favor, elige otro."
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"error": {"code": "USER_ALREADY_EXISTS", "message": "El usuario ya existe"}},
-            )
+                detail={"error": {"code": "USER_ALREADY_EXISTS", "message": error_msg}},
+            ) from e
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         return self._map_user_response(user)
@@ -260,22 +381,48 @@ class UserService:
 
     @staticmethod
     def _map_user_response(user: Usuario) -> UserResponse:
+        # Manejar casos donde los roles no estén cargados o sean None
+        try:
+            roles = [rol.nombre for rol in (user.roles or [])] if hasattr(user, 'roles') and user.roles is not None else []
+        except Exception as e:
+            logger.warning(f"Error al obtener roles del usuario {user.id}: {e}")
+            roles = []
+        
         return UserResponse(
             id=user.id,
             nombre_usuario=user.nombre_usuario,
             correo=user.correo,
             activo=bool(user.activo),
-            roles=[rol.nombre for rol in user.roles],
+            roles=roles,
         )
 
     @staticmethod
     def _map_user_summary(user: Usuario) -> UserSummary:
+        # Manejar casos donde los roles no estén cargados o sean None
+        roles = []
+        try:
+            if hasattr(user, 'roles'):
+                # Intentar acceder a los roles
+                user_roles = user.roles
+                if user_roles is not None:
+                    try:
+                        # Intentar iterar sobre los roles
+                        roles = [rol.nombre for rol in user_roles if hasattr(rol, 'nombre')]
+                    except Exception as iter_error:
+                        logger.warning(f"Error al iterar roles del usuario {user.id}: {iter_error}")
+                        roles = []
+                else:
+                    roles = []
+        except Exception as e:
+            logger.warning(f"Error al obtener roles del usuario {getattr(user, 'id', 'unknown')}: {e}")
+            roles = []
+        
         return UserSummary(
-            id=user.id,
-            nombre_usuario=user.nombre_usuario,
-            correo=user.correo,
-            activo=bool(user.activo),
-            roles=[rol.nombre for rol in user.roles],
+            id=getattr(user, 'id', 0),
+            nombre_usuario=getattr(user, 'nombre_usuario', 'N/A'),
+            correo=getattr(user, 'correo', 'N/A'),
+            activo=bool(getattr(user, 'activo', False)),
+            roles=roles,
         )
 
     @staticmethod
