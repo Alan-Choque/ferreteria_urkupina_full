@@ -131,7 +131,7 @@ export type User = {
   email: string
   firstName?: string
   lastName?: string
-  role: "admin" | "manager" | "staff"
+  role: "ADMIN" | "VENTAS" | "INVENTARIOS" | "SUPERVISOR"
   branchId?: ID
   active: boolean
 }

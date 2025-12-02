@@ -1,6 +1,7 @@
 import { api } from "@/lib/apiClient"
 import type { AdminUser, UserRole } from "@/lib/types/admin"
 import { mapUserRoles } from "@/lib/services/auth-service"
+import { mockUsers, isMockDataEnabled } from "@/lib/mock-data"
 
 type UserListResponse = {
   items: Array<{
@@ -36,14 +37,8 @@ type UpdatePayload = Partial<CreatePayload>
 let cachedRoles: RoleResponse[] | null = null
 
 function backendRoleName(role: UserRole): string {
-  switch (role) {
-    case "admin":
-      return "ADMIN"
-    case "manager":
-      return "MANAGER"
-    default:
-      return "USER"
-  }
+  // Los roles ya están en el formato correcto de la base de datos
+  return role.toUpperCase()
 }
 
 async function ensureRoles(): Promise<RoleResponse[]> {
@@ -65,8 +60,30 @@ function toAdminUser(user: UserResponse): AdminUser {
 }
 
 export const usersService = {
-  async listUsers(): Promise<AdminUser[]> {
-    const response = await api.get<UserListResponse>("/users")
+  async listUsers(search?: string, active?: boolean): Promise<AdminUser[]> {
+    // Si los datos mock están habilitados, devolver datos de prueba
+    if (isMockDataEnabled()) {
+      let users = [...mockUsers]
+      if (search) {
+        const searchLower = search.toLowerCase()
+        users = users.filter(user => 
+          user.name.toLowerCase().includes(searchLower) ||
+          user.email.toLowerCase().includes(searchLower)
+        )
+      }
+      if (active !== undefined) {
+        users = users.filter(user => user.active === active)
+      }
+      return users
+    }
+    
+    const params = new URLSearchParams()
+    if (search) params.append("q", search)
+    if (active !== undefined) params.append("active", String(active))
+    
+    const queryString = params.toString()
+    const url = queryString ? `/users?${queryString}` : "/users"
+    const response = await api.get<UserListResponse>(url)
     return response.items.map(toAdminUser)
   },
 
@@ -108,8 +125,17 @@ export const usersService = {
     let updated: AdminUser | null = null
 
     if (Object.keys(payload).length > 0) {
-      const response = await api.put<UserResponse>(`/users/${id}`, payload)
-      updated = toAdminUser(response)
+      try {
+        const response = await api.put<UserResponse>(`/users/${id}`, payload)
+        updated = toAdminUser(response)
+      } catch (error: any) {
+        console.error(`Error updating user ${id}:`, error)
+        // Si es un 404, verificar que el endpoint existe
+        if (error?.status === 404) {
+          throw new Error(`Usuario no encontrado o endpoint no disponible. Verifica que el usuario con ID ${id} existe.`)
+        }
+        throw error
+      }
     }
 
     if (data.role) {
@@ -140,5 +166,43 @@ export const usersService = {
 
   async resetUserPassword(id: number): Promise<void> {
     await api.post(`/users/${id}/reset-password`, {}, { idempotencyKey: false })
+  },
+
+  async getUserOrders(userId: number, page: number = 1, pageSize: number = 20) {
+    const response = await api.get<{
+      items: Array<{
+        id: number
+        fecha: string
+        estado: string
+        total: number
+        cliente?: { id: number; nombre: string }
+      }>
+      total: number
+      page: number
+      page_size: number
+    }>(`/users/${userId}/orders?page=${page}&page_size=${pageSize}`)
+    return response
+  },
+
+  async getUserCustomerHistory(userId: number) {
+    const response = await api.get<{
+      user_id: number
+      user_email: string
+      has_customer: boolean
+      customer_id?: number
+      current_data?: {
+        nombre: string
+        telefono: string | null
+        nit_ci: string | null
+        correo: string | null
+        direccion: string | null
+        fecha_registro: string | null
+      }
+      orders_count: number
+      first_order_date: string | null
+      last_order_date: string | null
+      variations_note: string
+    }>(`/users/${userId}/customer-history`)
+    return response
   },
 }

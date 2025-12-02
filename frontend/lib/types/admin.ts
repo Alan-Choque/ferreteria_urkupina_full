@@ -1,5 +1,6 @@
 // Admin types and interfaces for all modules
-export type UserRole = "admin" | "manager" | "staff"
+// Roles reales de la base de datos: ADMIN, VENTAS, INVENTARIOS, SUPERVISOR
+export type UserRole = "ADMIN" | "VENTAS" | "INVENTARIOS" | "SUPERVISOR"
 
 export interface Permission {
   module: string
@@ -69,11 +70,18 @@ export interface PurchaseOrder {
   id: number
   poNumber: string
   supplierId: string | number
-  status: "draft" | "sent" | "received" | "partial" | "canceled"
+  status: "borrador" | "enviado" | "confirmado" | "rechazado" | "recibido" | "facturado" | "cerrado"
   items: POItem[]
   expectedDate?: string | Date
   totalAmount?: number
   createdAt: string | Date
+  fecha_envio?: string | null
+  fecha_confirmacion?: string | null
+  fecha_recepcion?: string | null
+  fecha_facturacion?: string | null
+  fecha_cierre?: string | null
+  numero_factura_proveedor?: string | null
+  observaciones?: string | null
 }
 
 export interface POItem {
@@ -176,8 +184,16 @@ export interface Reservation {
   qty: number
   store: string
   depositAmount: number
-  status: "pending" | "confirmed" | "canceled"
+  status: "pending" | "confirmed" | "canceled" | "completed"
   createdAt: Date | string
+  // Campos adicionales
+  monto_anticipio?: number | null
+  fecha_anticipio?: string | null
+  metodo_pago_anticipio?: string | null
+  fecha_confirmacion?: string | null
+  fecha_completado?: string | null
+  orden_venta_id?: number | null
+  observaciones?: string | null
 }
 
 export interface Branch {

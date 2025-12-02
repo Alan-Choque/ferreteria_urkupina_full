@@ -46,14 +46,49 @@ export interface AdminUser {
 }
 
 function mapBackendRoles(roles: string[]): UserRole {
-  const primary = (roles[0] ?? "").toLowerCase();
-  if (primary.includes("admin")) {
-    return "admin";
+  if (!roles || roles.length === 0) {
+    return "SUPERVISOR"; // Rol por defecto más restrictivo
   }
-  if (primary.includes("manager") || primary.includes("gerente")) {
-    return "manager";
+  
+  // Verificar todos los roles, no solo el primero
+  const rolesUpper = roles.map(r => r.toUpperCase().trim());
+  
+  // Mapear roles reales de la base de datos
+  // Prioridad: ADMIN > VENTAS > INVENTARIOS > SUPERVISOR
+  if (rolesUpper.some(r => r === "ADMIN")) {
+    return "ADMIN";
   }
-  return "staff";
+  
+  if (rolesUpper.some(r => r === "VENTAS")) {
+    return "VENTAS";
+  }
+  
+  if (rolesUpper.some(r => r === "INVENTARIOS")) {
+    return "INVENTARIOS";
+  }
+  
+  if (rolesUpper.some(r => r === "SUPERVISOR")) {
+    return "SUPERVISOR";
+  }
+  
+  // Si no coincide con ningún rol conocido, usar el primero como fallback
+  return rolesUpper[0] as UserRole || "SUPERVISOR";
+}
+
+// Funciones helper para verificar permisos específicos
+export function canViewInventory(roles: string[]): boolean {
+  const rolesUpper = roles.map(r => r.toUpperCase());
+  return rolesUpper.some(r => ["ADMIN", "INVENTARIOS", "SUPERVISOR"].includes(r));
+}
+
+export function canUpdateStock(roles: string[]): boolean {
+  const rolesUpper = roles.map(r => r.toUpperCase());
+  return rolesUpper.some(r => ["ADMIN", "INVENTARIOS"].includes(r));
+}
+
+export function canManageProducts(roles: string[]): boolean {
+  const rolesUpper = roles.map(r => r.toUpperCase());
+  return rolesUpper.includes("ADMIN");
 }
 
 function userResponseToAdminUser(user: UserResponse): AdminUser {
@@ -71,7 +106,8 @@ function userResponseToAdminUser(user: UserResponse): AdminUser {
 
 export const mapUserRoles = mapBackendRoles;
 
-export type UserRole = "admin" | "manager" | "user" | "staff";
+// Roles reales de la base de datos
+export type UserRole = "ADMIN" | "VENTAS" | "INVENTARIOS" | "SUPERVISOR";
 
 export const authService = {
   /**
@@ -92,6 +128,12 @@ export const authService = {
 
       // Get user info
       const user = await this.getCurrentUser();
+      
+      // Disparar evento para actualizar el header
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("auth:login"));
+      }
+      
       return user;
     } catch (error: any) {
       if (error.status === 401) {
@@ -129,7 +171,7 @@ export const authService = {
     } catch (error: any) {
       if (error.status === 409) {
         const detail = error.detail?.error || {};
-        throw new Error(detail.message || "El usuario ya existe");
+        throw new Error(detail.message || "Este correo electrónico ya está registrado. Si ya tienes una cuenta, intenta iniciar sesión.");
       }
       if (error.status === 422) {
         const detail = error.detail || {};
@@ -166,7 +208,9 @@ export const authService = {
    */
   logout(): void {
     clearTokens();
+    // Disparar evento para actualizar el header
     if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("auth:logout"));
       window.location.href = "/login";
     }
   },
@@ -186,5 +230,80 @@ export const authService = {
    */
   isAuthenticated(): boolean {
     return getAccessToken() !== null;
+  },
+
+  /**
+   * Request password reset - sends email with reset token
+   */
+  async requestPasswordReset(email: string): Promise<void> {
+    try {
+      await api.post(
+        "/auth/forgot-password",
+        { email },
+        { requireAuth: false }
+      );
+    } catch (error: any) {
+      // No exponer si el email existe o no por seguridad
+      // Siempre mostrar mensaje de éxito
+      if (error.status === 404) {
+        // Email no encontrado, pero no lo revelamos
+        return;
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Reset password with token from email
+   */
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    try {
+      await api.post(
+        "/auth/reset-password",
+        { token, new_password: newPassword },
+        { requireAuth: false }
+      );
+    } catch (error: any) {
+      if (error.status === 400) {
+        throw new Error("El token es inválido o ha expirado");
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Authenticate with social provider (Google, Facebook, etc.)
+   */
+  async socialAuth(provider: string, idToken: string, accessToken?: string): Promise<AdminUser> {
+    try {
+      const response = await api.post<TokenResponse>(
+        "/auth/social-auth",
+        {
+          provider,
+          id_token: idToken,
+          access_token: accessToken,
+        },
+        { requireAuth: false }
+      );
+
+      // Store tokens
+      setAccessToken(response.access_token);
+      setRefreshToken(response.refresh_token);
+
+      // Get user info
+      const user = await this.getCurrentUser();
+      
+      // Disparar evento para actualizar el header
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("auth:login"));
+      }
+      
+      return user;
+    } catch (error: any) {
+      if (error.status === 401) {
+        throw new Error("Error al autenticar con " + provider);
+      }
+      throw error;
+    }
   },
 };

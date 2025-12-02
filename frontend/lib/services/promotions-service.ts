@@ -94,12 +94,13 @@ function toPromotionRequest(payload: CouponPayload) {
 }
 
 export const promotionsService = {
-  async listCoupons(active?: boolean): Promise<Coupon[]> {
+  async listCoupons(active?: boolean, search?: string): Promise<Coupon[]> {
     const params = new URLSearchParams()
     params.append("page_size", String(DEFAULT_PAGE_SIZE))
     if (typeof active === "boolean") {
       params.append("active", String(active))
     }
+    if (search) params.append("q", search)
     const response = await api.get<PromotionListResponse>(`/promotions?${params.toString()}`, {
       requireAuth: true,
     })

@@ -105,20 +105,20 @@ export const productsService = {
     }
     const queryString = queryParams.toString();
     const path = `/products${queryString ? `?${queryString}` : ""}`;
-    return api.get<ProductListResponse>(path);
+    return api.get<ProductListResponse>(path, { requireAuth: false });
   },
 
   async getProductBySlug(slug: string): Promise<ProductDetail> {
-    return api.get<ProductDetail>(`/products/${encodeURIComponent(slug)}`);
+    return api.get<ProductDetail>(`/products/${encodeURIComponent(slug)}`, { requireAuth: false });
   },
 
   async getProductById(id: string | number): Promise<ProductDetail> {
-    const detail = await api.get<ProductDetail>(`/products/by-id/${id}`);
+    const detail = await api.get<ProductDetail>(`/products/by-id/${id}`, { requireAuth: false });
     return { ...detail, name: detail.nombre };
   },
 
   async listVariantsBySlug(slug: string): Promise<ProductVariant[]> {
-    return api.get<ProductVariant[]>(`/products/${encodeURIComponent(slug)}/variants`);
+    return api.get<ProductVariant[]>(`/products/${encodeURIComponent(slug)}/variants`, { requireAuth: false });
   },
 
   async getStockByVariant(variantId: number | string): Promise<StockResponse[]> {
